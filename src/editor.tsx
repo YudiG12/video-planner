@@ -8,6 +8,7 @@ import Link from "@tiptap/extension-link";
 import Image from "@tiptap/extension-image";
 import Placeholder from "@tiptap/extension-placeholder";
 import { Markdown } from "tiptap-markdown";
+import GlobalDragHandle from "tiptap-extension-global-drag-handle";
 import * as I from "./icons";
 import { t, dateLocale, weekdays, setLocale } from "./i18n";
 
@@ -104,6 +105,7 @@ export function Field({ value, onSave, placeholder, style }: { value: string; on
       TaskList, TaskItem.configure({ nested: true }),
       Link.configure({ openOnClick: true, autolink: true, protocols: ["http", "https"], isAllowedUri: (u: string) => SAFE_URL.test(u), HTMLAttributes: { target: "_blank", rel: "noopener noreferrer" } } as any),
       Image, YouTubeRef,
+      GlobalDragHandle.configure({ dragHandleWidth: 22, scrollTreshold: 100 }),
       Placeholder.configure({ placeholder: ({ editor }) => (editor.isEmpty ? placeholder ?? t("Escreva…") : t("Digite ou use o + pra inserir blocos")) }),
       Markdown.configure({ html: false, linkify: true, breaks: true, transformPastedText: true }),
     ],

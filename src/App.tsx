@@ -141,6 +141,47 @@ function Options({ data, v, after }: { data: Data; v: Video; after: () => void }
   );
 }
 
+// Sponsor segment lives INSIDE the content, at the [INSERÇÃO] marker line (agents write the marker too).
+// Without the marker it shows right after the content. ↑/↓ move it one section at a time.
+const MARK = "[INSERÇÃO]";
+const isSection = (l: string) => /^(\*\*\d+\.|#{1,3} )/.test(l.trim());
+function Content({ sc, sp, set }: { sc: any; sp: any; set: (b: string, v: any) => void }) {
+  const text: string = sc.conteudo || "";
+  const lines = text.split("\n");
+  const at = lines.findIndex((l) => l.replace(/\\/g, "").trim() === MARK);
+  const before = at < 0 ? text : lines.slice(0, at).join("\n").replace(/\n+$/, "");
+  const after = at < 0 ? "" : lines.slice(at + 1).join("\n").replace(/^\n+/, "");
+  const join = (b: string, a: string, marker = at >= 0) => (marker ? `${b.replace(/\n+$/, "")}\n\n${MARK}\n\n${a.replace(/^\n+/, "")}` : b);
+  const move = (dir: -1 | 1) => {
+    const all = (before + "\n" + after).split("\n");
+    const starts = all.map((l, i) => (isSection(l) ? i : -1)).filter((i) => i > 0);
+    const cut = before.split("\n").length; // index where the marker sits now
+    const target = dir < 0 ? [...starts].reverse().find((i) => i < cut) : starts.find((i) => i > cut);
+    const k = target ?? (dir < 0 ? 0 : all.length);
+    set("conteudo", join(all.slice(0, k).join("\n"), all.slice(k).join("\n"), true));
+  };
+  const ins = sp && (
+    <div className="ins">
+      {sp.logo && <img className="logo" style={{ width: 26, height: 26 }} src={sp.logo} alt="" />}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <b style={{ color: "var(--sand-ink)", flex: 1 }}>{t("Inserção")} · {sp.name}</b>
+          <button className="ins-mv" title={t("Subir")} onClick={() => move(-1)}>↑</button>
+          <button className="ins-mv" title={t("Descer")} onClick={() => move(1)}>↓</button>
+        </div>
+        <Field value={sc.insercao} onSave={(x) => set("insercao", x)} placeholder={t("Onde entra e o que falar…")} />
+      </div>
+    </div>
+  );
+  return (
+    <div className="block"><h3>{t("2 · Conteúdo")}</h3>
+      <Field key={"b" + at + before.length} value={before} onSave={(x) => set("conteudo", join(x, after))} />
+      {ins}
+      {at >= 0 && <Field key={"a" + at} value={after} onSave={(x) => set("conteudo", join(before, x))} />}
+    </div>
+  );
+}
+
 function Card({ data, v, sel, onClick }: { data: Data; v: Video; sel: boolean; onClick: () => void }) {
   return (
     <div className={`card ${v.format === "vertical" ? "ig" : ""} ${sel ? "sel" : ""}`} draggable
@@ -189,6 +230,14 @@ function Kanban({ data, videos, openId, setOpenId, closing }: { data: Data; vide
   };
   return (
     <>
+      <div className="kb-wrap">
+      <div className="recent">
+        <span className="eyebrow">{t("Recentes")}</span>
+        <div className="recent-row">
+          {[...videos].filter((v) => v.status !== "Cancelados").sort((a, b) => ((b as any).updated_at || "").localeCompare((a as any).updated_at || "")).slice(0, 6)
+            .map((v) => <Card key={v.id} data={data} v={v} sel={openId === v.id} onClick={() => setOpenId(v.id)} />)}
+        </div>
+      </div>
       <div className="kanban">
         {statuses.map((st) => {
           const items = colItems(st);
@@ -209,6 +258,7 @@ function Kanban({ data, videos, openId, setOpenId, closing }: { data: Data; vide
             </div>
           );
         })}
+      </div>
       </div>
       {openId && <Panel data={data} id={openId} closing={closing} close={() => setOpenId(null)} />}
     </>
@@ -314,16 +364,7 @@ function Script({ data, v }: { data: Data; v: Video }) {
           </div>
         ))}
       </div>
-      <div className="block"><h3>{t("2 · Conteúdo")}</h3><Field value={sc.conteudo} onSave={(x) => set("conteudo", x)} /></div>
-      {sp && (
-        <div className="ins">
-          {sp.logo && <img className="logo" style={{ width: 26, height: 26 }} src={sp.logo} alt="" />}
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
-            <b style={{ color: "var(--sand-ink)" }}>{t("Inserção")} · {sp.name}</b>
-            <Field value={sc.insercao} onSave={(x) => set("insercao", x)} placeholder={t("Onde entra e o que falar…")} />
-          </div>
-        </div>
-      )}
+      <Content sc={sc} sp={sp} set={set} />
       <div className="block"><h3>{t("3 · Conclusão")}</h3><Field value={sc.conclusao} onSave={(x) => set("conclusao", x)} /></div>
     </>
   );

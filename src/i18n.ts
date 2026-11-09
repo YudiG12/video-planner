@@ -31,7 +31,7 @@ const EN: Record<string, string> = {
   "Título": "Heading", "Subtítulo": "Subheading", "Lista": "List", "Lista numerada": "Numbered list", "Checklist": "Checklist", "Citação": "Quote",
   "Print / imagem": "Screenshot / image", "Vídeo do YouTube": "YouTube video", "Divisor": "Divider", "Inserir bloco": "Insert block",
   "Negrito ⌘B": "Bold ⌘B", "Itálico ⌘I": "Italic ⌘I", "Riscado": "Strikethrough", "Código": "Code", "Link ⌘K": "Link ⌘K",
-  "Link do vídeo do YouTube": "YouTube video link", "Link": "Link", "Use um link http:// ou https://": "Use an http:// or https:// link", "Remover": "Remove",
+  "Link do vídeo do YouTube": "YouTube video link", "Link": "Link", "Use um link http:// ou https://": "Use an http:// or https:// link", "Remover": "Remove", "Subir": "Move up", "Recentes": "Recent", "Descer": "Move down",
   "Ver detalhes": "Details", "Editou": "Edited", "Criou": "Created", "Moveu para": "Moved to",
 };
 export const t = (pt: string) => (locale === "en" ? EN[pt] ?? pt : pt);

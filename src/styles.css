@@ -308,3 +308,22 @@ select,input[type=date]{border:1px solid var(--line);border-radius:var(--r);padd
 .plus-pop button{display:flex;align-items:center;gap:10px;padding:6px 8px;border:0;background:none;border-radius:4px;text-align:left;font-size:13px;color:var(--ink);cursor:pointer}
 .plus-pop button:hover{background:var(--bg-subtle)}
 .plus-pop .si{width:26px;height:26px;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:4px;color:var(--ink-muted);flex-shrink:0;background:#fff}
+.block .ins{margin:10px 0}
+.ins-mv{width:26px;height:24px;border:1px solid var(--sand,#E6D5C1);background:#fff;border-radius:var(--r);color:var(--sand-ink,#5B4630);cursor:pointer;font-size:13px}
+.ins-mv:hover{background:#FCFAF7}
+/* Notion-like block drag handle */
+.rt-wrap{padding-left:26px;margin-left:-26px}
+.drag-handle{position:fixed;opacity:1;transition:opacity .15s;border-radius:4px;width:18px;height:22px;z-index:50;cursor:grab;
+ background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 16' fill='%23677A8E'%3E%3Ccircle cx='3' cy='3' r='1.4'/%3E%3Ccircle cx='7' cy='3' r='1.4'/%3E%3Ccircle cx='3' cy='8' r='1.4'/%3E%3Ccircle cx='7' cy='8' r='1.4'/%3E%3Ccircle cx='3' cy='13' r='1.4'/%3E%3Ccircle cx='7' cy='13' r='1.4'/%3E%3C/svg%3E");
+ background-repeat:no-repeat;background-position:center;background-size:10px 16px}
+.drag-handle:hover{background-color:var(--bg-subtle)}
+.drag-handle:active{cursor:grabbing}
+.drag-handle.hide{opacity:0;pointer-events:none}
+.rt .ProseMirror-selectednode:not(img){background:rgba(55,103,168,.08);border-radius:4px}
+.kb-wrap{flex:1;min-width:0;display:flex;flex-direction:column;overflow:auto}
+.kb-wrap>.kanban{flex:1;overflow:visible;padding-top:12px}
+.recent{padding:20px 32px 0;display:flex;flex-direction:column;gap:10px}
+.recent-row{display:flex;gap:12px;overflow-x:auto;padding-bottom:4px}
+.recent-row .card{width:260px;flex-shrink:0}
+.serie-h{height:auto;min-height:0;padding:2px 2px 4px;gap:4px}
+.serie-h p{-webkit-line-clamp:2;height:34px}
