@@ -232,7 +232,7 @@ function Kanban({ data, videos, openId, setOpenId, closing }: { data: Data; vide
     <>
       <div className="kb-wrap">
       <div className="recent">
-        <span className="eyebrow">{t("Recentes")}</span>
+        <span className="recent-h"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3767A8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span className="eyebrow">{t("Recentes")}</span></span>
         <div className="recent-row">
           {[...videos].filter((v) => v.status !== "Cancelados").sort((a, b) => ((b as any).updated_at || "").localeCompare((a as any).updated_at || "")).slice(0, 6)
             .map((v) => <Card key={v.id} data={data} v={v} noDrag sel={openId === v.id} onClick={() => setOpenId(v.id)} />)}
