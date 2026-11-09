@@ -11,6 +11,7 @@ L = {
  "search": '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
  "terminal": '<path d="m4 17 6-6-6-6"/><path d="M12 19h8"/>',
  "chat": '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/>',
+ "user": '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
  "lock": '<rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
  "database": '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/>',
  "play": '<path d="M6 4l14 8-14 8z"/>',
@@ -70,9 +71,9 @@ hld = HEAD + f"""<div style="width:1200px;height:520px;position:relative;backgro
 <div style="position:absolute;left:348px;top:54px;display:flex;align-items:center;gap:8px" class="eb">{ic("cloudflare", "#F38020", 18)}<span>Cloudflare</span></div>
 <svg style="position:absolute;left:0;top:0" width="1200" height="500">{M}
 <g fill="none" style="stroke:var(--arrow)" stroke-width="1.8" marker-end="url(#a)">
- <path d="M222 176 H408"/><path d="M522 176 H628"/><path d="M190 376 H628"/>
+ <path d="M190 176 H408"/><path d="M522 176 H628"/><path d="M190 376 H628"/>
  <path d="M742 176 H820 V262 H892"/><path d="M742 376 H820 V290 H892"/></g></svg>
-<div style="position:absolute;left:52px;top:120px">{laptop}</div><div class="nm" style="left:37px;top:240px">You</div>
+{sq(137, 176, "user", "#4A5866", "You")}
 {sq(137, 376, "claude", "#D97757", "Your AI agent")}
 {sq(465, 176, "lock", "#2F8A5B", "Access")}{sq(685, 176, "workers", "#F38020", "App Worker")}{sq(685, 376, "workers", "#F38020", "Agent Worker")}{sq(950, 276, "database", "#D1495B", "D1")}
 <div style="position:absolute;left:585px;top:470px;width:200px;text-align:center;font-size:13px;color:var(--subtle)">MCP · Bearer token</div>

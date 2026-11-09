@@ -18,6 +18,7 @@ LUCIDE = {
     "search": '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
     "sparkles": '<path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.14 1.58a.5.5 0 0 1 0 .96l-6.14 1.58a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z"/>',
     "terminal": '<path d="m4 17 6-6-6-6"/><path d="M12 19h8"/>',
+    "user": '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
     "browser": '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 9h20M6 6.5h.01M9 6.5h.01"/>',
     "image": '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>',
     "play": '<path d="M6 4l14 8-14 8z"/>',
@@ -79,7 +80,7 @@ def svg(width, height, title, subtitle, body):
 A, B, Cx, D = 40, 420, 800, 1180
 g = []
 g.append('<rect x="390" y="92" width="1040" height="560" rx="10" class="g"/>' + f'<path transform="translate(404,98) scale(0.75)" d="{BRANDS["cloudflare"]}" fill="#F38020"/>' + '<text x="428" y="112" class="gl">CLOUDFLARE</text>')
-g.append(box(A, 150, "You", "browser", "slate", "kanban, calendar, script editor", icons=("browser",)))
+g.append(box(A, 150, "You", "browser", "slate", "kanban, calendar, script editor", icons=("user",)))
 g.append(box(A, 420, "AI agent", "Claude Code · any MCP client", "slate", "token in .agent-token", icons=("claude",)))
 g.append(box(A, 290, "YouTube", "oEmbed", "slate", "titles for video references", icons=("play",)))
 g.append(box(B, 150, "Access", "login · policy", "green", "your email only", icons=("lock",)))
