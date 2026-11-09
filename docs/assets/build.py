@@ -44,13 +44,18 @@ def col(title, bg, cards):
     cs = "".join(f'<div style="background:var(--bg);border:1px solid var(--line2);border-radius:4px;padding:8px 9px;font-size:12.5px;font-weight:600;line-height:1.25">{c}<i style="display:block;margin-top:7px;width:38px;height:6px;border-radius:2px;background:{t}"></i></div>' for c, t in cards)
     return f'<div style="width:150px;padding:9px;border-radius:4px;background:{bg};display:flex;flex-direction:column;gap:7px;border:1px solid var(--line)"><span class="eb" style="font-size:10.5px">{title}</span>{cs}</div>'
 board = col("Ideas", "#F9E9EE", [("Git rebase without fear", "#BFE3E6"), ("Use early returns", "#C9D8EE"), ("How an index works", "#BFE3E6")]) + col("This month", "#E6EEF7", [("Caching: when it helps", "#BFE3E6"), ("A day at a coffee shop", "#EDD9B4")]) + col("Published", "#E3F3EA", [("Docker from zero", "#BFE3E6"), ("Small commits", "#C9D8EE"), ("My study routine", "#EDD9B4")])
-banner = HEAD + f"""<div style="width:1280px;height:300px;position:relative;border:1px solid var(--line);border-radius:4px;background:var(--bg);overflow:hidden">
+banner = HEAD + f"""<div style="width:1280px;height:364px;position:relative;border:1px solid var(--line);border-radius:4px;background:var(--bg);overflow:hidden">
 <div style="position:absolute;left:64px;top:54px;width:640px">
  <div style="font-weight:800;font-size:62px;line-height:1.02;letter-spacing:-.03em">Video Planner</div>
  <div style="font-size:21px;color:var(--muted);margin-top:14px;line-height:1.35">Plan YouTube videos and reels, with scripts<br>your AI agent can read and write.</div>
  <div style="display:flex;gap:8px;margin-top:22px;align-items:center">{ic("cloudflare", "#F38020", 26)}{tags}</div>
 </div>
 <div style="position:absolute;left:720px;top:40px;display:flex;gap:10px;align-items:flex-start">{board}</div>
+<div style="position:absolute;left:0;right:0;bottom:0;height:64px;border-top:1px solid var(--line);background:var(--sand-bg);display:flex;align-items:center;gap:12px;padding:0 64px">
+ <img src="avatar.jpg" style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:1px solid var(--sand-line)">
+ <span style="font-size:15px;color:var(--muted)">A project by <b style="color:var(--ink);font-weight:700">Yudi Ganeko</b> · software engineer, code and dev careers</span>
+ <span style="margin-left:auto;display:flex;align-items:center;gap:8px;font-size:15px;color:var(--muted)"><svg width="26" height="19" viewBox="0 0 18 13"><rect width="18" height="13" rx="3" fill="#E5322D"/><path d="M7 3.5v6l5-3z" fill="#fff"/></svg><b style="color:var(--ink);font-weight:700">{SUBS}</b> subscribers on YouTube</span>
+</div>
 </div></body></html>"""
 open(os.path.join(D, "banner.html"), "w").write(banner)
 
