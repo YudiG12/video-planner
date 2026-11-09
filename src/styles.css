@@ -337,3 +337,7 @@ select,input[type=date]{border:1px solid var(--line);border-radius:var(--r);padd
 /* Recent cards: shorter, title on one line */
 .recent-row .card{padding:10px 14px;gap:8px}
 .recent-row .card-t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;font-size:14px}
+/* Recent row fits the visible screen width (doesn't follow the kanban's scroll width) */
+.kb-wrap>.recent{position:sticky;left:0;box-sizing:border-box;width:100%;max-width:100%}
+.recent-row{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;overflow:hidden}
+.recent-row .card{width:auto;margin:0;min-width:0}
