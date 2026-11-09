@@ -8,7 +8,13 @@
 
 <p align="center"><img src="docs/assets/hld.png" alt="High-level design: you reach the app through Cloudflare Access; your AI agent reaches a second Worker over MCP with a Bearer token; both use the same D1 database" width="760"></p>
 
-<p align="center"><sub>A simplified view. Every component, with the decision behind it: <a href="ARCHITECTURE.md">ARCHITECTURE.md</a>.</sub></p>
+<details>
+<summary><b>Architecture in depth</b></summary>
+<br>
+<p align="center"><img src="docs/architecture/architecture.png" alt="Detailed architecture: Access and its certs, the app and agent Workers, static assets, D1 tables for videos, history and images, and YouTube oEmbed for video titles" width="100%"></p>
+
+Every component, with the decision behind it: [ARCHITECTURE.md](ARCHITECTURE.md).
+</details>
 
 ## What's inside
 
