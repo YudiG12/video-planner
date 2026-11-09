@@ -11,6 +11,7 @@ L = {
  "search": '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
  "terminal": '<path d="m4 17 6-6-6-6"/><path d="M12 19h8"/>',
  "chat": '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/>',
+ "user": '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
  "lock": '<rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
  "database": '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/>',
  "play": '<path d="M6 4l14 8-14 8z"/>',
@@ -43,13 +44,18 @@ def col(title, bg, cards):
     cs = "".join(f'<div style="background:var(--bg);border:1px solid var(--line2);border-radius:4px;padding:8px 9px;font-size:12.5px;font-weight:600;line-height:1.25">{c}<i style="display:block;margin-top:7px;width:38px;height:6px;border-radius:2px;background:{t}"></i></div>' for c, t in cards)
     return f'<div style="width:150px;padding:9px;border-radius:4px;background:{bg};display:flex;flex-direction:column;gap:7px;border:1px solid var(--line)"><span class="eb" style="font-size:10.5px">{title}</span>{cs}</div>'
 board = col("Ideas", "#F9E9EE", [("Git rebase without fear", "#BFE3E6"), ("Use early returns", "#C9D8EE"), ("How an index works", "#BFE3E6")]) + col("This month", "#E6EEF7", [("Caching: when it helps", "#BFE3E6"), ("A day at a coffee shop", "#EDD9B4")]) + col("Published", "#E3F3EA", [("Docker from zero", "#BFE3E6"), ("Small commits", "#C9D8EE"), ("My study routine", "#EDD9B4")])
-banner = HEAD + f"""<div style="width:1280px;height:300px;position:relative;border:1px solid var(--line);border-radius:4px;background:var(--bg);overflow:hidden">
+banner = HEAD + f"""<div style="width:1280px;height:364px;position:relative;border:1px solid var(--line);border-radius:4px;background:var(--bg);overflow:hidden">
 <div style="position:absolute;left:64px;top:54px;width:640px">
  <div style="font-weight:800;font-size:62px;line-height:1.02;letter-spacing:-.03em">Video Planner</div>
  <div style="font-size:21px;color:var(--muted);margin-top:14px;line-height:1.35">Plan YouTube videos and reels, with scripts<br>your AI agent can read and write.</div>
  <div style="display:flex;gap:8px;margin-top:22px;align-items:center">{ic("cloudflare", "#F38020", 26)}{tags}</div>
 </div>
 <div style="position:absolute;left:720px;top:40px;display:flex;gap:10px;align-items:flex-start">{board}</div>
+<div style="position:absolute;left:0;right:0;bottom:0;height:64px;border-top:1px solid var(--line);background:var(--sand-bg);display:flex;align-items:center;gap:12px;padding:0 64px">
+ <img src="avatar.jpg" style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:1px solid var(--sand-line)">
+ <span style="font-size:15px;color:var(--muted)">A project by <b style="color:var(--ink);font-weight:700">Yudi Ganeko</b> · software engineer, code and dev careers</span>
+ <span style="margin-left:auto;display:flex;align-items:center;gap:8px;font-size:15px;color:var(--muted)"><svg width="26" height="19" viewBox="0 0 18 13"><rect width="18" height="13" rx="3" fill="#E5322D"/><path d="M7 3.5v6l5-3z" fill="#fff"/></svg><b style="color:var(--ink);font-weight:700">{SUBS}</b> subscribers on YouTube</span>
+</div>
 </div></body></html>"""
 open(os.path.join(D, "banner.html"), "w").write(banner)
 
@@ -64,16 +70,19 @@ phone = '''<svg width="70" height="124" viewBox="0 0 70 124"><rect x="2" y="2" w
 <rect x="26" y="11" width="18" height="5" rx="2.5" fill="var(--bezel)"/><rect x="14" y="26" width="34" height="5" rx="1" fill="var(--bar)"/><rect x="14" y="36" width="42" height="4" rx="1" fill="var(--bar)"/><rect x="14" y="44" width="38" height="4" rx="1" fill="var(--bar)"/>
 <rect x="24" y="62" width="32" height="14" rx="3" fill="#5A4BD1" opacity=".85"/><rect x="14" y="82" width="30" height="12" rx="3" fill="var(--bar)"/><rect x="26" y="108" width="18" height="3" rx="1.5" fill="var(--bar)"/></svg>'''
 laptop = mac
+def bare(cx, cy, n, c, name, s=104):
+    return (f'<div style="position:absolute;left:{cx-s/2}px;top:{cy-s/2}px;width:{s}px;height:{s}px;display:flex;align-items:center;justify-content:center">{ic(n, c, 64)}</div>'
+            f'<div class="nm" style="left:{cx-100}px;top:{cy+s/2+12}px">{name}</div>')
 M = '<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--arrow)"/></marker></defs>'
 hld = HEAD + f"""<div style="width:1200px;height:520px;position:relative;background:var(--bg)">
 <div style="position:absolute;left:330px;top:40px;width:840px;height:456px;border:1px dashed var(--line2);border-radius:4px"></div>
 <div style="position:absolute;left:348px;top:54px;display:flex;align-items:center;gap:8px" class="eb">{ic("cloudflare", "#F38020", 18)}<span>Cloudflare</span></div>
 <svg style="position:absolute;left:0;top:0" width="1200" height="500">{M}
 <g fill="none" style="stroke:var(--arrow)" stroke-width="1.8" marker-end="url(#a)">
- <path d="M222 176 H408"/><path d="M522 176 H628"/><path d="M190 376 H628"/>
+ <path d="M190 176 H408"/><path d="M522 176 H628"/><path d="M190 376 H628"/>
  <path d="M742 176 H820 V262 H892"/><path d="M742 376 H820 V290 H892"/></g></svg>
-<div style="position:absolute;left:52px;top:120px">{laptop}</div><div class="nm" style="left:37px;top:240px">You</div>
-{sq(137, 376, "claude", "#D97757", "Your AI agent")}
+{bare(137, 176, "user", "#4A5866", "You")}
+{bare(137, 376, "claude", "#D97757", "Your AI agent")}
 {sq(465, 176, "lock", "#2F8A5B", "Access")}{sq(685, 176, "workers", "#F38020", "App Worker")}{sq(685, 376, "workers", "#F38020", "Agent Worker")}{sq(950, 276, "database", "#D1495B", "D1")}
 <div style="position:absolute;left:585px;top:470px;width:200px;text-align:center;font-size:13px;color:var(--subtle)">MCP · Bearer token</div>
 <div style="position:absolute;left:585px;top:270px;width:200px;text-align:center;font-size:13px;color:var(--subtle)">React app · REST API</div>
