@@ -1,4 +1,4 @@
-# Architecture
+# Architecture: low-level design
 
 ![Architecture](docs/architecture/architecture.png)
 
