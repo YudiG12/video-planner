@@ -70,6 +70,9 @@ phone = '''<svg width="70" height="124" viewBox="0 0 70 124"><rect x="2" y="2" w
 <rect x="26" y="11" width="18" height="5" rx="2.5" fill="var(--bezel)"/><rect x="14" y="26" width="34" height="5" rx="1" fill="var(--bar)"/><rect x="14" y="36" width="42" height="4" rx="1" fill="var(--bar)"/><rect x="14" y="44" width="38" height="4" rx="1" fill="var(--bar)"/>
 <rect x="24" y="62" width="32" height="14" rx="3" fill="#5A4BD1" opacity=".85"/><rect x="14" y="82" width="30" height="12" rx="3" fill="var(--bar)"/><rect x="26" y="108" width="18" height="3" rx="1.5" fill="var(--bar)"/></svg>'''
 laptop = mac
+def bare(cx, cy, n, c, name, s=104):
+    return (f'<div style="position:absolute;left:{cx-s/2}px;top:{cy-s/2}px;width:{s}px;height:{s}px;display:flex;align-items:center;justify-content:center">{ic(n, c, 64)}</div>'
+            f'<div class="nm" style="left:{cx-100}px;top:{cy+s/2+12}px">{name}</div>')
 M = '<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--arrow)"/></marker></defs>'
 hld = HEAD + f"""<div style="width:1200px;height:520px;position:relative;background:var(--bg)">
 <div style="position:absolute;left:330px;top:40px;width:840px;height:456px;border:1px dashed var(--line2);border-radius:4px"></div>
@@ -78,8 +81,8 @@ hld = HEAD + f"""<div style="width:1200px;height:520px;position:relative;backgro
 <g fill="none" style="stroke:var(--arrow)" stroke-width="1.8" marker-end="url(#a)">
  <path d="M190 176 H408"/><path d="M522 176 H628"/><path d="M190 376 H628"/>
  <path d="M742 176 H820 V262 H892"/><path d="M742 376 H820 V290 H892"/></g></svg>
-{sq(137, 176, "user", "#4A5866", "You")}
-{sq(137, 376, "claude", "#D97757", "Your AI agent")}
+{bare(137, 176, "user", "#4A5866", "You")}
+{bare(137, 376, "claude", "#D97757", "Your AI agent")}
 {sq(465, 176, "lock", "#2F8A5B", "Access")}{sq(685, 176, "workers", "#F38020", "App Worker")}{sq(685, 376, "workers", "#F38020", "Agent Worker")}{sq(950, 276, "database", "#D1495B", "D1")}
 <div style="position:absolute;left:585px;top:470px;width:200px;text-align:center;font-size:13px;color:var(--subtle)">MCP · Bearer token</div>
 <div style="position:absolute;left:585px;top:270px;width:200px;text-align:center;font-size:13px;color:var(--subtle)">React app · REST API</div>
