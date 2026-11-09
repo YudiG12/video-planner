@@ -1,4 +1,4 @@
-<p align="center"><img src="docs/assets/banner-light.png" alt="Video Planner: plan YouTube videos and reels, with scripts your AI agent can read and write" width="100%"></p>
+<p align="center"><img src="docs/assets/banner.png" alt="Video Planner: plan YouTube videos and reels, with scripts your AI agent can read and write" width="100%"></p>
 
 <p align="center"><img alt="Cloudflare Workers" src="https://img.shields.io/badge/runtime-Cloudflare_Workers-F38020?style=flat-square&labelColor=1B2632&logo=cloudflare&logoColor=white"> <img alt="D1" src="https://img.shields.io/badge/database-D1-D1495B?style=flat-square&labelColor=1B2632"> <img alt="MCP" src="https://img.shields.io/badge/protocol-MCP-5A4BD1?style=flat-square&labelColor=1B2632"> <img alt="Cloudflare Access" src="https://img.shields.io/badge/auth-Cloudflare_Access-2F8A5B?style=flat-square&labelColor=1B2632"> <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-8A6A3F?style=flat-square&labelColor=1B2632"></a></p>
 
@@ -6,7 +6,7 @@
 
 **A planner for YouTube videos and reels**: a kanban, a calendar and a Notion-like script editor, in one Cloudflare Worker. Your AI agent gets the same powers through MCP: it lists videos, writes a script block without touching the others, moves cards. Free tier friendly. The UI is in English, with Brazilian Portuguese available (`LOCALE=pt-BR`).
 
-<p align="center"><img src="docs/assets/hld-light.png" alt="High-level design: you reach the app through Cloudflare Access; your AI agent reaches a second Worker over MCP with a Bearer token; both use the same D1 database" width="760"></p>
+<p align="center"><img src="docs/assets/hld.png" alt="High-level design: you reach the app through Cloudflare Access; your AI agent reaches a second Worker over MCP with a Bearer token; both use the same D1 database" width="760"></p>
 
 <p align="center"><sub>A simplified view. Every component, with the decision behind it: <a href="ARCHITECTURE.md">ARCHITECTURE.md</a>.</sub></p>
 
@@ -14,7 +14,7 @@
 
 | Kanban | Script |
 |---|---|
-| <img src="docs/assets/kanban.png" alt="Kanban by status"> | <img src="docs/assets/script.png" alt="Script with 3 title + thumbnail pairs and hook blocks"> |
+| <img src="docs/assets/kanban-board.png" alt="Kanban by status"> | <img src="docs/assets/script.png" alt="Script with 3 title + thumbnail pairs and hook blocks"> |
 | **Calendar** | **Ideas by series** |
 | <img src="docs/assets/calendar.png" alt="Infinite calendar"> | <img src="docs/assets/ideas.png" alt="Ideas grouped by series"> |
 
