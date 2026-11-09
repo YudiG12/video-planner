@@ -1,0 +1,11 @@
+{
+  // Agent-only Worker: API + MCP, outside Cloudflare Access, Bearer token required on every request.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "video-planner-agent",
+  "main": "worker/agent.ts",
+  "compatibility_date": "2026-06-11",
+  "workers_dev": true,
+  "d1_databases": [{ "binding": "DB", "database_name": "video-planner", "database_id": "REPLACE_WITH_YOUR_D1_ID" }],
+  // Secret: AGENT_TOKEN (same value as the main Worker)
+  "observability": { "enabled": true }
+}

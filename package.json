@@ -1,0 +1,40 @@
+{
+  "name": "video-planner",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "deploy": "vite build && wrangler deploy && wrangler deploy -c wrangler.agent.jsonc",
+    "db:migrate:local": "wrangler d1 migrations apply video-planner --local",
+    "db:migrate": "wrangler d1 migrations apply video-planner --remote",
+    "typecheck": "tsc --noEmit",
+    "setup": "node scripts/setup.mjs",
+    "db:seed:demo": "wrangler d1 execute video-planner --local --file scripts/demo-seed.sql"
+  },
+  "dependencies": {
+    "@tiptap/extension-image": "^2.11.5",
+    "@tiptap/extension-link": "^2.11.5",
+    "@tiptap/extension-placeholder": "^2.11.5",
+    "@tiptap/extension-task-item": "^2.11.5",
+    "@tiptap/extension-task-list": "^2.11.5",
+    "@tiptap/pm": "^2.11.5",
+    "@tiptap/react": "^2.11.5",
+    "@tiptap/starter-kit": "^2.11.5",
+    "hono": "^4.6.14",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tiptap-markdown": "^0.8.10"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.2.0",
+    "@cloudflare/workers-types": "^5.20261109.1",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7",
+    "wrangler": "^4.159.0"
+  },
+  "license": "MIT"
+}
