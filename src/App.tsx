@@ -368,7 +368,9 @@ function ThumbBox({ thumb, note, save }: { thumb?: string; note?: string; save: 
 }
 
 function YTPreview({ data, v }: { data: Data; v: Video }) {
-  const [cut, setCut] = useState(true);
+  // global preference (applies to every video), off by default
+  const [cut, setCutRaw] = useState(() => { try { return localStorage.getItem("vp-cut-title") === "1"; } catch { return false; } });
+  const setCut = (v: boolean) => { setCutRaw(v); try { localStorage.setItem("vp-cut-title", v ? "1" : "0"); } catch {} };
   const pairs: { title?: string; thumb?: string }[] = v.script.pairs || [{}, {}, {}];
   const save = (i: number, p: { title?: string; thumb?: string; thumb_note?: string }) => {
     const next = [0, 1, 2].map((j) => (j === i ? { ...pairs[j], ...p } : pairs[j] || {}));
