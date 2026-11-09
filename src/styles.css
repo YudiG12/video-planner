@@ -334,3 +334,6 @@ select,input[type=date]{border:1px solid var(--line);border-radius:var(--r);padd
 /* Recent cards: same width as a kanban column, same gap */
 .recent-row .card{width:290px;margin:0}
 .recent-h{display:flex;align-items:center;gap:8px}
+/* Recent cards: shorter, title on one line */
+.recent-row .card{padding:10px 14px;gap:8px}
+.recent-row .card-t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;font-size:14px}
