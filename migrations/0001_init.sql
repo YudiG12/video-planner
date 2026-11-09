@@ -42,13 +42,13 @@ CREATE TABLE history (
 );
 CREATE INDEX history_video ON history(video_id, at);
 
--- Exemplos. Troque pelas suas séries e patrocinadores (veja o README).
+-- Examples. Replace with your own series and sponsors (see README).
 INSERT INTO sponsors (id, name, logo) VALUES
  ('acme','Acme',NULL);
 
 INSERT INTO series (id,name,format,color,bg,description,phrase_open,phrase_close,position) VALUES
- ('dicas','Dicas Rápidas','vertical','#3767A8','#E8EEF6','Uma dica de programação por vídeo','Esse é o episódio {ep} de Dicas Rápidas, a série com uma dica de programação por vídeo.','Esse foi o episódio {ep} de Dicas Rápidas. Me segue pro próximo vídeo.',1),
- ('rotina','Rotina de Dev','vertical','#2F8A5B','#E3F3EA','Um dia de trabalho, do começo ao fim','Esse é o episódio {ep} de Rotina de Dev, a série onde eu mostro um dia de trabalho.','Esse foi o episódio {ep} de Rotina de Dev. Me segue pro próximo vídeo.',2),
- ('tutorial','Tutorial','longo','#0E7C86','#E3F1F2','Passo a passo técnico',NULL,NULL,3),
- ('vlog','Vlog','longo','#9A6510','#F8EFDF','Bastidores e rotina',NULL,NULL,4),
- ('opiniao','Opinião','longo','#C23B5E','#FBE9EE','Notícias e opinião',NULL,NULL,5);
+ ('tips','Quick Tips','vertical','#3767A8','#E8EEF6','One coding tip per video','This is episode {ep} of Quick Tips, the series with one coding tip per video.','That was episode {ep} of Quick Tips. Follow for the next one.',1),
+ ('daily','Dev Day','vertical','#2F8A5B','#E3F3EA','A work day, start to finish','This is episode {ep} of Dev Day, where I show a full work day.','That was episode {ep} of Dev Day. Follow for the next one.',2),
+ ('tutorial','Tutorial','longo','#0E7C86','#E3F1F2','Step-by-step technical videos',NULL,NULL,3),
+ ('vlog','Vlog','longo','#9A6510','#F8EFDF','Behind the scenes',NULL,NULL,4),
+ ('opinion','Opinion','longo','#C23B5E','#FBE9EE','News and takes',NULL,NULL,5);

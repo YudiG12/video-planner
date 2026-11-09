@@ -1,4 +1,4 @@
-// Porta do agente: Worker separado (fora do Access), só API + MCP, sempre exige Bearer.
+// Agent entry point: separate Worker (outside Access), API + MCP only, always requires Bearer.
 import app, { safeEqual } from "./index";
 export default {
   fetch(req: Request, env: { AGENT_TOKEN?: string }, ctx: ExecutionContext) {

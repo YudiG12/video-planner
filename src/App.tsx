@@ -1,17 +1,18 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api, type Boot, type Format, type Series, type Video } from "./api";
 import * as I from "./icons";
+import { t, tAction, dateLocale, weekdays, setLocale } from "./i18n";
 import { Field } from "./editor";
 
 type View = "kanban" | "calendario" | "derivados" | "ideias";
 type Filter = "todos" | Format;
 
-// ---------- estado global simples ----------
+// ---------- simple global state ----------
 function useData() {
   const [boot, setBoot] = useState<Boot | null>(null);
   const [videos, setVideos] = useState<Video[]>([]);
   const reload = () => api.list().then(setVideos);
-  useEffect(() => { api.boot().then(setBoot); reload(); }, []);
+  useEffect(() => { api.boot().then((b) => { setLocale(b.locale); document.documentElement.lang = b.locale || "en"; setBoot(b); }); reload(); }, []);
   const patch = async (id: string, p: Partial<Video>) => {
     setVideos((vs) => vs.map((v) => (v.id === id ? { ...v, ...p, script: { ...v.script, ...(p.script || {}) } } : v)));
     const nv = await api.update(id, p);
@@ -28,7 +29,7 @@ function useHash() {
   return h;
 }
 
-const ch = (data: { boot: Boot | null }) => data.boot?.channel || { name: "Seu Canal", handle: "seucanal", avatar: "/avatar.svg" };
+const ch = (data: { boot: Boot | null }) => data.boot?.channel || { name: "Your Channel", handle: "yourchannel", avatar: "/avatar.svg" };
 const seriesOf = (boot: Boot | null, v: Video) => boot?.series.find((s) => s.id === v.series_id) || null;
 const sponsorOf = (boot: Boot | null, v: Video) => boot?.sponsors.find((s) => s.id === v.sponsor_id) || null;
 const tagText = (s: Series | null, v: Video) => (s ? (v.episode && s.format === "vertical" ? `EP ${v.episode} · ${s.name}` : s.name) : "");
@@ -37,7 +38,7 @@ const tagText = (s: Series | null, v: Video) => (s ? (v.episode && s.format === 
 export default function App() {
   const data = useData();
   const hash = useHash();
-  // cada aba é uma rota: /kanban, /calendario, /derivados, /ideias
+  // each tab is a route: /kanban, /calendario, /derivados, /ideias
   const VIEWS: View[] = ["kanban", "calendario", "derivados", "ideias"];
   const fromPath = () => (VIEWS.find((x) => location.pathname === "/" + x) || "kanban") as View;
   const [view, setViewRaw] = useState<View>(fromPath);
@@ -57,7 +58,7 @@ export default function App() {
 
   const novo = async () => {
     const format: Format = filter === "vertical" ? "vertical" : "longo";
-    const v = await api.create({ title: "Novo vídeo", format });
+    const v = await api.create({ title: t("Novo vídeo"), format });
     await data.reload();
     setView("kanban");
     setOpenId(v.id);
@@ -69,22 +70,22 @@ export default function App() {
     <div className="app">
       <div className="topbar">
         <div className="tabs">
-          <Tab on={view === "kanban"} onClick={() => { setOpenIdRaw(null); setClosing(false); setView("kanban"); }} icon={<I.IKanban />} label="Kanban" />
-          <Tab on={view === "calendario"} onClick={() => { setOpenIdRaw(null); setClosing(false); setView("calendario"); }} icon={<I.ICal />} label="Calendário" />
-          <Tab on={view === "derivados"} onClick={() => { setOpenIdRaw(null); setClosing(false); setView("derivados"); }} icon={<I.IDeriv />} label="Derivados" />
-          <Tab on={view === "ideias"} onClick={() => { setOpenIdRaw(null); setClosing(false); setView("ideias"); }} icon={<I.IBulb />} label="Ideias" />
+          <Tab on={view === "kanban"} onClick={() => { setOpenIdRaw(null); setClosing(false); setView("kanban"); }} icon={<I.IKanban />} label={t("Kanban")} />
+          <Tab on={view === "calendario"} onClick={() => { setOpenIdRaw(null); setClosing(false); setView("calendario"); }} icon={<I.ICal />} label={t("Calendário")} />
+          <Tab on={view === "derivados"} onClick={() => { setOpenIdRaw(null); setClosing(false); setView("derivados"); }} icon={<I.IDeriv />} label={t("Derivados")} />
+          <Tab on={view === "ideias"} onClick={() => { setOpenIdRaw(null); setClosing(false); setView("ideias"); }} icon={<I.IBulb />} label={t("Ideias")} />
         </div>
         <div className="right">
           <div className="filters">
-            <button className={filter === "todos" ? "on" : ""} onClick={() => setFilter("todos")}><I.IGrid />Todos</button>
-            <button className={filter === "longo" ? "on" : ""} onClick={() => setFilter("longo")}><I.YT w={16} />Longos</button>
-            <button className={filter === "vertical" ? "on" : ""} onClick={() => setFilter("vertical")}><I.IG />Verticais</button>
+            <button className={filter === "todos" ? "on" : ""} onClick={() => setFilter("todos")}><I.IGrid />{t("Todos")}</button>
+            <button className={filter === "longo" ? "on" : ""} onClick={() => setFilter("longo")}><I.YT w={16} />{t("Longos")}</button>
+            <button className={filter === "vertical" ? "on" : ""} onClick={() => setFilter("vertical")}><I.IG />{t("Verticais")}</button>
           </div>
-          <button className="btn-dark" onClick={novo}>+ Novo vídeo</button>
+          <button className="btn-dark" onClick={novo}>{t("+ Novo vídeo")}</button>
         </div>
       </div>
       <div className="body" onMouseDown={(e) => {
-        // clicar fora do painel (e fora de um card) fecha o painel
+        // clicking outside the panel (and outside a card) closes it
         if (openId && !(e.target as HTMLElement).closest(".panel, .card, .chip, .idea, .drow .link")) setOpenId(null);
       }}>
         {view === "kanban" && <Kanban data={data} videos={shown} openId={openId} setOpenId={setOpenId} closing={closing} />}
@@ -109,28 +110,28 @@ function CardMeta({ data, v, small }: { data: Data; v: Video; small?: boolean })
     <div className="card-meta">
       <div className="fmt">{v.format === "longo" ? <I.YT w={small ? 15 : 18} /> : <I.IG s={small ? 12 : 14} />}</div>
       <div className="tagwrap">{s && <span className="tag" style={{ background: s.bg, color: s.color }}>{small ? s.name : tagText(s, v)}</span>}</div>
-      {!small && v.publish_date && <span className="mono" style={{ fontSize: 11, color: "var(--muted)", flexShrink: 0, marginLeft: "auto" }}>{new Date(v.publish_date + "T12:00").toLocaleDateString("pt-BR", { day: "numeric", month: "short" }).replace(".", "")}</span>}
+      {!small && v.publish_date && <span className="mono" style={{ fontSize: 11, color: "var(--muted)", flexShrink: 0, marginLeft: "auto" }}>{new Date(v.publish_date + "T12:00").toLocaleDateString(dateLocale(), { day: "numeric", month: "short" }).replace(".", "")}</span>}
       {sp?.logo && <img className="logo" src={sp.logo} alt={sp.name} title={sp.name} />}
     </div>
   );
 }
 
-// Menu "Opções" com apagar (pede confirmação antes)
+// "Options" menu with delete (asks for confirmation first)
 function Options({ data, v, after }: { data: Data; v: Video; after: () => void }) {
   const [open, setOpen] = useState(false);
   const [confirm, setConfirm] = useState(false);
-  const kind = v.status === "Ideias" ? "ideia" : "roteiro";
+  const kind = v.status === "Ideias" ? "Apagar ideia" : "Apagar roteiro";
   return (
     <div className="opts">
-      <button className="iconbtn opts-btn" onClick={() => { setOpen(!open); setConfirm(false); }} title="Opções">Opções</button>
+      <button className="iconbtn opts-btn" onClick={() => { setOpen(!open); setConfirm(false); }} title={t("Opções")}>{t("Opções")}</button>
       {open && (
         <div className="opts-pop" onMouseDown={(e) => e.stopPropagation()}>
-          {!confirm ? <button className="opts-del" onClick={() => setConfirm(true)}>Apagar {kind}</button> : (
+          {!confirm ? <button className="opts-del" onClick={() => setConfirm(true)}>{t(kind)}</button> : (
             <div className="opts-confirm">
-              <span>Apagar <b>{v.title}</b>? Não dá pra desfazer.</span>
+              <span>{t("Apagar")} <b>{v.title}</b>? {t("Não dá pra desfazer.")}</span>
               <div style={{ display: "flex", gap: 8 }}>
-                <button className="btn-ghost" onClick={() => { setConfirm(false); setOpen(false); }}>Cancelar</button>
-                <button className="btn-danger" onClick={async () => { await api.remove(v.id); setOpen(false); after(); data.reload(); }}>Apagar</button>
+                <button className="btn-ghost" onClick={() => { setConfirm(false); setOpen(false); }}>{t("Cancelar")}</button>
+                <button className="btn-danger" onClick={async () => { await api.remove(v.id); setOpen(false); after(); data.reload(); }}>{t("Apagar")}</button>
               </div>
             </div>
           )}
@@ -166,7 +167,7 @@ function Kanban({ data, videos, openId, setOpenId, closing }: { data: Data; vide
   const [slot, setSlot] = useState<{ st: string; i: number } | null>(null);
   const statuses = (data.boot?.statuses || []).filter((s) => s !== "Cancelados");
   const colItems = (st: string) => videos.filter((v) => v.status === st && v.id !== drag);
-  // índice de onde o card cairia, pelo meio de cada card da coluna
+  // index where the card would drop, based on the midpoint of each card in the column
   const slotAt = (st: string, e: React.DragEvent) => {
     const cards = Array.from((e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>(":scope > .card"));
     let i = cards.findIndex((c) => { const r = c.getBoundingClientRect(); return e.clientY < r.top + r.height / 2; });
@@ -197,7 +198,7 @@ function Kanban({ data, videos, openId, setOpenId, closing }: { data: Data; vide
             <div key={st} style={{ background: COL_BG[st] }} className={"col" + (slot?.st === st ? " drop" : "")}
               onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; slotAt(st, e); }}
               onDrop={drop}>
-              <div className="col-h">{COL_ICONS[st]}<b>{st}</b><span>{all}</span></div>
+              <div className="col-h">{COL_ICONS[st]}<b>{t(st)}</b><span>{all}</span></div>
               {(() => { let i = 0; const out: any[] = [];
                 videos.filter((v) => v.status === st).forEach((v) => {
                   if (v.id === drag) { out.push(<div key={v.id} className="dragging-src"><Card data={data} v={v} sel={false} onClick={() => {}} /></div>); return; }
@@ -215,7 +216,7 @@ function Kanban({ data, videos, openId, setOpenId, closing }: { data: Data; vide
   void setDrag;
 }
 
-// ---------- painel lateral ----------
+// ---------- side panel ----------
 function Panel({ data, id, close, closing }: { data: Data; id: string; close: () => void; closing?: boolean }) {
   const [pw, setPwRaw] = useState(() => { try { return Number(localStorage.getItem("vp-pw")) || 620; } catch { return 620; } });
   const setPw = (w: number) => { setPwRaw(w); try { localStorage.setItem("vp-pw", String(w)); } catch {} };
@@ -234,8 +235,8 @@ function Panel({ data, id, close, closing }: { data: Data; id: string; close: ()
         <Meta data={data} v={v} />
         <div className="meta">
           <Options data={data} v={v} after={close} />
-          <a className="iconbtn" href={`#/video/${v.id}`} title="Abrir em tela cheia"><I.IExpand /></a>
-          <button className="iconbtn" onClick={close} title="Fechar"><I.IX /></button>
+          <a className="iconbtn" href={`#/video/${v.id}`} title={t("Abrir em tela cheia")}><I.IExpand /></a>
+          <button className="iconbtn" onClick={close} title={t("Fechar")}><I.IX /></button>
         </div>
       </div>
       <TitleInput data={data} v={v} />
@@ -269,9 +270,9 @@ function TitleInput({ data, v }: { data: Data; v: Video }) {
   return <textarea className="title-in" rows={1} style={{ fieldSizing: "content" } as any} value={t} onChange={(e) => setT(e.target.value)} onBlur={() => t !== v.title && data.patch(v.id, { title: t })} />;
 }
 
-// textarea que salva no blur
+// textarea that saves on blur
 
-// ---------- roteiro ----------
+// ---------- script ----------
 function Script({ data, v }: { data: Data; v: Video }) {
   const set = (block: string, value: any) => data.patch(v.id, { script: { [block]: value } });
   const s = seriesOf(data.boot, v);
@@ -285,16 +286,16 @@ function Script({ data, v }: { data: Data; v: Video }) {
         <div className="row" style={{ gap: 28, alignItems: "flex-start" }}>
           <Reel v={v} s={s} chan={ch(data)} onCapa={(url) => set("capa", url)} />
           <div className="block" style={{ flex: 1 }}>
-            <h3>1 · Gancho</h3>
+            <h3>{t("1 · Gancho")}</h3>
             <Field value={sc.gancho} onSave={(x) => set("gancho", x)} style={{ fontSize: 17, lineHeight: "26px" }} />
-            {s?.phrase_open && <div className="sand"><span className="eyebrow">Frase da série · {s.name}</span>{phrase(s.phrase_open)}</div>}
+            {s?.phrase_open && <div className="sand"><span className="eyebrow">{t("Frase da série")} · {s.name}</span>{phrase(s.phrase_open)}</div>}
           </div>
         </div>
-        <div className="block"><h3>2 · Conteúdo</h3><Field value={sc.conteudo} onSave={(x) => set("conteudo", x)} /></div>
+        <div className="block"><h3>{t("2 · Conteúdo")}</h3><Field value={sc.conteudo} onSave={(x) => set("conteudo", x)} /></div>
         <div className="block">
-          <h3>3 · Conclusão</h3>
-          <Field value={sc.conclusao} onSave={(x) => set("conclusao", x)} placeholder="Sua reflexão final…" />
-          {s?.phrase_close && <div className="sand"><span className="eyebrow">Fechamento</span>{phrase(s.phrase_close)}</div>}
+          <h3>{t("3 · Conclusão")}</h3>
+          <Field value={sc.conclusao} onSave={(x) => set("conclusao", x)} placeholder={t("Sua reflexão final…")} />
+          {s?.phrase_close && <div className="sand"><span className="eyebrow">{t("Fechamento")}</span>{phrase(s.phrase_close)}</div>}
         </div>
       </>
     );
@@ -305,30 +306,30 @@ function Script({ data, v }: { data: Data; v: Video }) {
     <>
       <YTPreview data={data} v={v} />
       <div className="block">
-        <h3>1 · Hook</h3>
+        <h3>{t("1 · Hook")}</h3>
         {(["confirmacao", "promessa", "curiosidade", "pessoalidade"] as const).map((k) => (
           <div className="row" key={k}>
-            <label className="eyebrow">{({ confirmacao: "Confirmação", promessa: "Promessa", curiosidade: "Curiosidade", pessoalidade: "Pessoalidade" } as any)[k]}</label>
+            <label className="eyebrow">{t(({ confirmacao: "Confirmação", promessa: "Promessa", curiosidade: "Curiosidade", pessoalidade: "Pessoalidade" } as any)[k])}</label>
             <Field value={hook[k]} onSave={(x) => set("hook", { ...hook, [k]: x })} />
           </div>
         ))}
       </div>
-      <div className="block"><h3>2 · Conteúdo</h3><Field value={sc.conteudo} onSave={(x) => set("conteudo", x)} /></div>
+      <div className="block"><h3>{t("2 · Conteúdo")}</h3><Field value={sc.conteudo} onSave={(x) => set("conteudo", x)} /></div>
       {sp && (
         <div className="ins">
           {sp.logo && <img className="logo" style={{ width: 26, height: 26 }} src={sp.logo} alt="" />}
           <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
-            <b style={{ color: "var(--sand-ink)" }}>Inserção · {sp.name}</b>
-            <Field value={sc.insercao} onSave={(x) => set("insercao", x)} placeholder="Onde entra e o que falar…" />
+            <b style={{ color: "var(--sand-ink)" }}>{t("Inserção")} · {sp.name}</b>
+            <Field value={sc.insercao} onSave={(x) => set("insercao", x)} placeholder={t("Onde entra e o que falar…")} />
           </div>
         </div>
       )}
-      <div className="block"><h3>3 · Conclusão</h3><Field value={sc.conclusao} onSave={(x) => set("conclusao", x)} /></div>
+      <div className="block"><h3>{t("3 · Conclusão")}</h3><Field value={sc.conclusao} onSave={(x) => set("conclusao", x)} /></div>
     </>
   );
 }
 
-// reduz a imagem no navegador (máx. 480px, JPEG) antes de salvar no banco
+// downscale the image in the browser (max 480px, JPEG) before saving to the DB
 function fileToThumb(f: File): Promise<string> {
   return new Promise((res, rej) => {
     const img = new Image();
@@ -350,13 +351,13 @@ function ThumbBox({ thumb, note, save }: { thumb?: string; note?: string; save: 
   return (
     <div className="thumb-wrap">
       <div className={"thumb" + (isImg ? " img" : "")} title={note || ""}>{isImg ? <img src={thumb} alt="" /> : (text || "")}</div>
-      <button className="thumb-edit" onClick={() => setEdit(!edit)} title="Editar thumbnail"><I.IPen /></button>
+      <button className="thumb-edit" onClick={() => setEdit(!edit)} title={t("Editar thumbnail")}><I.IPen /></button>
       {edit && (
         <div className="thumb-pop">
           <input ref={fileRef} type="file" accept="image/*" hidden onChange={async (e) => { const f = e.target.files?.[0]; if (f) { save({ thumb: await fileToThumb(f) }); setEdit(false); } }} />
-          <button className="btn-dark" onClick={() => fileRef.current?.click()}>Enviar imagem</button>
-          {isImg && <button className="btn-ghost" onClick={() => { save({ thumb: "" }); setEdit(false); }}>Remover imagem</button>}
-          <textarea className="ta" placeholder="Descrição da thumb (texto, ideia ou URL)" defaultValue={text || ""} onBlur={(e) => {
+          <button className="btn-dark" onClick={() => fileRef.current?.click()}>{t("Enviar imagem")}</button>
+          {isImg && <button className="btn-ghost" onClick={() => { save({ thumb: "" }); setEdit(false); }}>{t("Remover imagem")}</button>}
+          <textarea className="ta" placeholder={t("Descrição da thumb (texto, ideia ou URL)")} defaultValue={text || ""} onBlur={(e) => {
             const val = e.target.value.trim();
             if (/^https?:\/\/\S+$/.test(val)) save({ thumb: val }); else if (val !== (text || "")) save(isImg ? { thumb_note: val } : { thumb: "", thumb_note: val });
           }} />
@@ -376,8 +377,8 @@ function YTPreview({ data, v }: { data: Data; v: Video }) {
   return (
     <div className="block">
       <div className="yt-h">
-        <span className="meta"><I.YT w={16} /><span className="eyebrow" style={{ color: "var(--ink-strong)" }}>Título + thumbnail · teste A/B</span></span>
-        <button className="toggle" onClick={() => setCut(!cut)}>Cortar título como no YouTube<span className={"sw" + (cut ? " on" : "")}><i /></span></button>
+        <span className="meta"><I.YT w={16} /><span className="eyebrow" style={{ color: "var(--ink-strong)" }}>{t("Título + thumbnail · teste A/B")}</span></span>
+        <button className="toggle" onClick={() => setCut(!cut)}>{t("Cortar título como no YouTube")}<span className={"sw" + (cut ? " on" : "")}><i /></span></button>
       </div>
       <div className="yt">
         {[0, 1, 2].map((i) => {
@@ -385,23 +386,23 @@ function YTPreview({ data, v }: { data: Data; v: Video }) {
           const isUrl = p.thumb && /^(https?:|\/)/.test(p.thumb);
           return (
             <div className="yt-item" key={i}>
-              <div className="yt-n">{i + 1}{i === 0 && <span className="p">PRINCIPAL</span>}</div>
+              <div className="yt-n">{i + 1}{i === 0 && <span className="p">{t("PRINCIPAL")}</span>}</div>
               <ThumbBox thumb={p.thumb} note={(p as any).thumb_note} save={(q) => save(i, q)} />
               <div className="yt-info">
                 <img className="avatar" src={ch(data).avatar} alt="" />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   {cut && p.title && p.title.length > 60
                     ? <span className="yt-title" title={p.title} onClick={() => setCut(false)}>{p.title.slice(0, 58)}…</span>
-                    : <textarea className="yt-title" rows={1} placeholder="Título…" defaultValue={p.title || ""} onBlur={(e) => e.target.value !== (p.title || "") && save(i, { title: e.target.value })} />}
-                  <div className="yt-ch">{ch(data).name} · {p.title ? `${p.title.length} caracteres` : "—"}</div>
+                    : <textarea className="yt-title" rows={1} placeholder={t("Título…")} defaultValue={p.title || ""} onBlur={(e) => e.target.value !== (p.title || "") && save(i, { title: e.target.value })} />}
+                  <div className="yt-ch">{ch(data).name} · {p.title ? `${p.title.length} ${t("caracteres")}` : "—"}</div>
                 </div>
               </div>
             </div>
           );
         })}
         <div className="yt-desc">
-          <span className="eyebrow">Descrição das thumbnails</span>
-          <Field value={v.script.thumb_desc || ""} placeholder="O que vai na tela, textos, prints, ideias…" onSave={(t) => data.patch(v.id, { script: { thumb_desc: t } })} />
+          <span className="eyebrow">{t("Descrição das thumbnails")}</span>
+          <Field value={v.script.thumb_desc || ""} placeholder={t("O que vai na tela, textos, prints, ideias…")} onSave={(t) => data.patch(v.id, { script: { thumb_desc: t } })} />
         </div>
       </div>
     </div>
@@ -411,15 +412,15 @@ function YTPreview({ data, v }: { data: Data; v: Video }) {
 function Reel({ v, s, onCapa, chan }: { v: Video; s: Series | null; onCapa: (url: string) => void; chan: { name: string; handle: string; avatar: string } }) {
   const capa = v.script.capa as string | undefined;
   return (
-    <div className="reel" title="Clique pra colar a URL da capa" onClick={() => { const u = prompt("URL da capa (frame real do vlog)", capa || ""); if (u != null) onCapa(u); }}>
-      {capa ? <img src={capa} alt="" /> : <div style={{ color: "#677A8E", fontSize: 12, padding: 50, textAlign: "center" }}>Sem capa</div>}
+    <div className="reel" title={t("Clique pra colar a URL da capa")} onClick={() => { const u = prompt(t("URL da capa (frame real do vlog)"), capa || ""); if (u != null) onCapa(u); }}>
+      {capa ? <img src={capa} alt="" /> : <div style={{ color: "#677A8E", fontSize: 12, padding: 50, textAlign: "center" }}>{t("Sem capa")}</div>}
       {s && <span className="sel" style={{ color: s.color }}>EP {v.episode ?? "?"} · {s.name.split(" ")[0].toUpperCase()}</span>}
       <span className="who"><img className="avatar" style={{ width: 22, height: 22 }} src={chan.avatar} alt="" />{chan.handle}</span>
     </div>
   );
 }
 
-// ---------- tela cheia ----------
+// ---------- full screen ----------
 const DERIV_LONGO = [["cortes_ig", "2 cortes IG", <I.IG s={16} />], ["shorts", "Shorts", <I.IShorts />], ["tiktok", "TikTok", <I.ITikTok />], ["linkedin", "2 posts LinkedIn", <I.ILinkedIn />], ["journal", "Journal", <I.IJournal />]] as const;
 const DERIV_VERT = [["reels", "Reels", <I.IG s={16} />], ["tiktok", "TikTok", <I.ITikTok />], ["shorts", "Shorts", <I.IShorts />]] as const;
 
@@ -427,12 +428,12 @@ function FullScreen({ data, id }: { data: Data; id: string }) {
   const [hist, setHist] = useState<Video["history"]>([]);
   const v = data.videos.find((x) => x.id === id);
   useEffect(() => { api.get(id).then((x) => setHist(x.history)); }, [id, v?.script, v?.status]);
-  if (!data.boot || !v) return <div className="empty">Carregando…</div>;
+  if (!data.boot || !v) return <div className="empty">{t("Carregando…")}</div>;
   const series = data.boot.series.filter((s) => s.format === v.format);
   const deriv = v.format === "longo" ? DERIV_LONGO : DERIV_VERT;
   return (
     <div className="app">
-      <div className="full-top"><a href="#">← Kanban</a><span style={{ color: "var(--line-strong)" }}>/</span><span style={{ color: "var(--ink-muted)" }}>{v.status}</span><span style={{ marginLeft: "auto" }}><Options data={data} v={v} after={() => { location.hash = ""; }} /></span></div>
+      <div className="full-top"><a href="#">← Kanban</a><span style={{ color: "var(--line-strong)" }}>/</span><span style={{ color: "var(--ink-muted)" }}>{t(v.status)}</span><span style={{ marginLeft: "auto" }}><Options data={data} v={v} after={() => { location.hash = ""; }} /></span></div>
       <div className="full">
         <div className="full-body">
           <div className="doc big">
@@ -441,31 +442,31 @@ function FullScreen({ data, id }: { data: Data; id: string }) {
           </div>
           <div className="side">
             <div className="box">
-              <label className="field"><span>Status</span>
-                <select value={v.status} onChange={(e) => data.patch(v.id, { status: e.target.value })}>{data.boot.statuses.map((s) => <option key={s}>{s}</option>)}</select></label>
-              <label className="field"><span>Publicação</span>
+              <label className="field"><span>{t("Status")}</span>
+                <select value={v.status} onChange={(e) => data.patch(v.id, { status: e.target.value })}>{data.boot.statuses.map((s) => <option key={s} value={s}>{t(s)}</option>)}</select></label>
+              <label className="field"><span>{t("Publicação")}</span>
                 <input type="date" value={v.publish_date || ""} onChange={(e) => data.patch(v.id, { publish_date: e.target.value || null })} /></label>
-              <label className="field"><span>Série</span>
+              <label className="field"><span>{t("Série")}</span>
                 <select value={v.series_id || ""} onChange={(e) => data.patch(v.id, { series_id: e.target.value || null })}><option value="">—</option>{series.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
-              {v.format === "vertical" && <label className="field"><span>Episódio</span>
+              {v.format === "vertical" && <label className="field"><span>{t("Episódio")}</span>
                 <input type="number" value={v.episode ?? ""} onChange={(e) => data.patch(v.id, { episode: e.target.value ? Number(e.target.value) : null })} style={{ border: "1px solid var(--line)", borderRadius: 4, padding: "5px 8px" }} /></label>}
-              <label className="field"><span>Patrocinador</span>
-                <select value={v.sponsor_id || ""} onChange={(e) => data.patch(v.id, { sponsor_id: e.target.value || null })}><option value="">Sem publi</option>{data.boot.sponsors.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
-              <label className="field"><span>Formato</span>
-                <select value={v.format} onChange={(e) => data.patch(v.id, { format: e.target.value as Format })}><option value="longo">Longo · YouTube</option><option value="vertical">Vertical</option></select></label>
+              <label className="field"><span>{t("Patrocinador")}</span>
+                <select value={v.sponsor_id || ""} onChange={(e) => data.patch(v.id, { sponsor_id: e.target.value || null })}><option value="">{t("Sem publi")}</option>{data.boot.sponsors.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+              <label className="field"><span>{t("Formato")}</span>
+                <select value={v.format} onChange={(e) => data.patch(v.id, { format: e.target.value as Format })}><option value="longo">{t("Longo · YouTube")}</option><option value="vertical">{t("Vertical")}</option></select></label>
             </div>
             <div className="block" style={{ gap: 10 }}>
-              <span className="eyebrow">{v.format === "longo" ? "Derivados" : "Onde postar"}</span>
+              <span className="eyebrow">{t(v.format === "longo" ? "Derivados" : "Onde postar")}</span>
               {deriv.map(([k, label, icon]) => (
-                <div className="check" key={k}>{icon}<span>{label}</span>
+                <div className="check" key={k}>{icon}<span>{t(label)}</span>
                   <button className={"cb" + (v.derivatives[k] ? " on" : "")} onClick={() => data.patch(v.id, { derivatives: { [k]: !v.derivatives[k] } })}>{v.derivatives[k] && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.5"><path d="M5 12l5 5 9-10" /></svg>}</button>
                 </div>
               ))}
             </div>
             <div className="block" style={{ gap: 0 }}>
-              <span className="eyebrow" style={{ marginBottom: 10 }}>Histórico</span>
+              <span className="eyebrow" style={{ marginBottom: 10 }}>{t("Histórico")}</span>
               {(hist || []).slice(0, 8).map((h, i) => (
-                <div className="hist" key={i}><span className="who" style={{ color: h.actor === "agente" ? "#5A4BD1" : "#3767A8" }}>{h.actor === "agente" ? "Agente" : "Você"}</span><span>{h.action}</span><span className="when">{fmtWhen(h.at)}</span></div>
+                <div className="hist" key={i}><span className="who" style={{ color: h.actor === "agente" ? "#5A4BD1" : "#3767A8" }}>{h.actor === "agente" ? t("Agente") : t("Você")}</span><span>{tAction(h.action)}</span><span className="when">{fmtWhen(h.at)}</span></div>
               ))}
             </div>
           </div>
@@ -478,15 +479,15 @@ function FullScreen({ data, id }: { data: Data; id: string }) {
 function fmtWhen(at: string) {
   const d = new Date(at.replace(" ", "T") + "Z");
   const diff = (Date.now() - d.getTime()) / 864e5;
-  if (diff < 1) return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  if (diff < 1) return d.toLocaleTimeString(dateLocale(), { hour: "2-digit", minute: "2-digit" });
   if (diff < 2) return "ontem";
-  return d.toLocaleDateString("pt-BR", { day: "numeric", month: "short" }).replace(".", "");
+  return d.toLocaleDateString(dateLocale(), { day: "numeric", month: "short" }).replace(".", "");
 }
 
-// ---------- calendário ----------
+// ---------- calendar ----------
 function Calendar({ data, videos, open }: { data: Data; videos: Video[]; open: (id: string) => void }) {
   const now = new Date();
-  const [range, setRange] = useState({ from: -3, to: 6 }); // meses relativos ao atual
+  const [range, setRange] = useState({ from: -3, to: 6 }); // months relative to the current one
   const [over, setOver] = useState<string | null>(null);
   const [active, setActive] = useState(`${now.getFullYear()}-${now.getMonth()}`);
   const box = useRef<HTMLDivElement>(null), top = useRef<HTMLDivElement>(null), bot = useRef<HTMLDivElement>(null);
@@ -495,9 +496,9 @@ function Calendar({ data, videos, open }: { data: Data; videos: Video[]; open: (
   const today = iso(now);
   const months = useMemo(() => Array.from({ length: range.to - range.from + 1 }, (_, i) => new Date(now.getFullYear(), now.getMonth() + range.from + i, 1)), [range.from, range.to]);
   const byDate = useMemo(() => { const m: Record<string, Video[]> = {}; videos.forEach((v) => { if (v.publish_date && v.status !== "Cancelados") (m[v.publish_date] ||= []).push(v); }); return m; }, [videos]);
-  // rola até o mês atual na primeira vez
+  // scroll to the current month on first load
   useEffect(() => { box.current?.querySelector(".mon.cur")?.scrollIntoView({ block: "start" }); }, []);
-  // mantém a posição ao carregar meses em cima
+  // keep scroll position when loading months above
   useLayoutEffect(() => { if (prevH.current != null && box.current) { box.current.scrollTop += box.current.scrollHeight - prevH.current; prevH.current = null; } }, [range.from]);
   useEffect(() => {
     const io = new IntersectionObserver((es) => es.forEach((e) => {
@@ -512,17 +513,17 @@ function Calendar({ data, videos, open }: { data: Data; videos: Video[]; open: (
     e.preventDefault(); setOver(null);
     await data.patch(e.dataTransfer.getData("text/plain"), { publish_date: date });
   };
-  const label = (d: Date) => d.toLocaleDateString("pt-BR", { month: "long", year: "numeric" }).replace(/^./, (c) => c.toUpperCase()).replace(" de ", " ");
+  const label = (d: Date) => d.toLocaleDateString(dateLocale(), { month: "long", year: "numeric" }).replace(/^./, (c) => c.toUpperCase()).replace(" de ", " ");
   return (
     <div className="cal" ref={box} onScroll={() => {
-      // mês ativo = o que está no meio da tela
+      // active month = the one in the middle of the screen
       const r = box.current!.getBoundingClientRect();
       const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.closest<HTMLElement>("[data-m]");
       if (el && el.dataset.m !== active) setActive(el.dataset.m!);
     }}>
       <div className="cal-top">
-        <div className="grid dows">{["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"].map((d) => <div className="dow" key={d}>{d}</div>)}</div>
-        <div className="filters"><button onClick={() => box.current?.querySelector(".mon.cur")?.scrollIntoView({ behavior: "smooth", block: "start" })}>Hoje</button></div>
+        <div className="grid dows">{weekdays().map((d) => <div className="dow" key={d}>{d}</div>)}</div>
+        <div className="filters"><button onClick={() => box.current?.querySelector(".mon.cur")?.scrollIntoView({ behavior: "smooth", block: "start" })}>{t("Hoje")}</button></div>
       </div>
       <div ref={top} style={{ height: 1 }} />
       <div className="grid">
@@ -537,7 +538,7 @@ function Calendar({ data, videos, open }: { data: Data; videos: Video[]; open: (
             cells.push(
               <div key={k} data-m={`${d.getFullYear()}-${d.getMonth()}`} className={`day ${d.getDay() % 6 === 0 ? "wk" : ""} ${`${d.getFullYear()}-${d.getMonth()}` !== active ? "dim" : ""} ${k === today ? "today" : ""} ${over === k ? "drop" : ""} ${day === 1 ? "first" + (cur ? " mon cur" : "") : ""}`}
                 onDragOver={(e) => { e.preventDefault(); setOver(k); }} onDragLeave={() => setOver(null)} onDrop={(e) => drop(k, e)}>
-                <span className="n">{day === 1 ? <b className="mlabel">{label(d)}</b> : null}{k === today ? `${day} · hoje` : day}</span>
+                <span className="n">{day === 1 ? <b className="mlabel">{label(d)}</b> : null}{k === today ? `${day} · ${t("hoje")}` : day}</span>
                 {(byDate[k] || []).map((v) => (
                   <div key={v.id} className={"chip" + (v.format === "vertical" ? " ig" : "")} draggable onDragStart={(e) => e.dataTransfer.setData("text/plain", v.id)} onClick={() => open(v.id)}>
                     <span className="chip-t">{v.title}</span>
@@ -555,7 +556,7 @@ function Calendar({ data, videos, open }: { data: Data; videos: Video[]; open: (
   );
 }
 
-// ---------- ideias ----------
+// ---------- ideas ----------
 function Ideias({ data, filter, open }: { data: Data; filter: Filter; open: (id: string) => void }) {
   if (!data.boot) return null;
   const series = data.boot.series.filter((s) => filter === "todos" || s.format === filter);
@@ -572,7 +573,7 @@ function Ideias({ data, filter, open }: { data: Data; filter: Filter; open: (id:
             </div>
             <div className="serie-cards">
               {items.map((v) => <Card key={v.id} data={data} v={v} sel={false} onClick={() => open(v.id)} />)}
-              <button className="newidea" onClick={() => add(s)}>+ Nova ideia</button>
+              <button className="newidea" onClick={() => add(s)}>{t("+ Nova ideia")}</button>
             </div>
           </div>
         );
@@ -581,29 +582,29 @@ function Ideias({ data, filter, open }: { data: Data; filter: Filter; open: (id:
   );
 }
 
-// ---------- derivados ----------
+// ---------- derivatives ----------
 function Derivados({ data, open }: { data: Data; open: (id: string) => void }) {
   const rows = data.videos.filter((v) => v.format === "longo" && v.status === "Finalizado").sort((a, b) => (b.publish_date || "").localeCompare(a.publish_date || ""));
   const cols = DERIV_LONGO;
-  if (!rows.length) return <div className="empty">Nenhum vídeo longo finalizado ainda.</div>;
+  if (!rows.length) return <div className="empty">{t("Nenhum vídeo longo finalizado ainda.")}</div>;
   return (
     <div className="deriv">
-      <div className="drow h"><span className="name eyebrow">Vídeo longo publicado</span><span className="d eyebrow">Publicado</span>
-        {cols.map(([k, label, icon]) => <span className="c" key={k}>{icon}{label.replace("2 posts ", "")}</span>)}<span className="f eyebrow">Falta</span></div>
+      <div className="drow h"><span className="name eyebrow">{t("Vídeo longo publicado")}</span><span className="d eyebrow">{t("Publicado")}</span>
+        {cols.map(([k, label, icon]) => <span className="c" key={k}>{icon}{t(label).replace("2 posts ", "").replace("2 ", "")}</span>)}<span className="f eyebrow">{t("Falta")}</span></div>
       {rows.map((v) => {
         const s = seriesOf(data.boot, v);
-        const tecnico = true; // Journal (artigo) vale pra qualquer vídeo
+        const tecnico = true; // Journal (article) applies to any video
         const keys = cols.map(([k]) => k).filter((k) => k !== "journal" || tecnico);
         const falta = keys.filter((k) => !v.derivatives[k]).length;
         return (
           <div className="drow" key={v.id}>
-            <span className="name link" title="Abrir detalhes" onClick={() => open(v.id)}><I.YT /><span className="tt">{v.title}</span>{s && <span className="tag" style={{ background: s.bg, color: s.color }}>{s.name}</span>}</span>
-            <span className="d mono">{v.publish_date ? new Date(v.publish_date + "T12:00").toLocaleDateString("pt-BR", { day: "numeric", month: "short" }).replace(".", "") : "—"}</span>
+            <span className="name link" title={t("Abrir detalhes")} onClick={() => open(v.id)}><I.YT /><span className="tt">{v.title}</span>{s && <span className="tag" style={{ background: s.bg, color: s.color }}>{s.name}</span>}</span>
+            <span className="d mono">{v.publish_date ? new Date(v.publish_date + "T12:00").toLocaleDateString(dateLocale(), { day: "numeric", month: "short" }).replace(".", "") : "—"}</span>
             {cols.map(([k]) => (
               <span className="c" key={k}>{k === "journal" && !tecnico ? <span className="mono" style={{ color: "var(--line-strong)" }}>—</span> :
                 <button className={"cb" + (v.derivatives[k] ? " on" : "")} style={{ margin: 0 }} onClick={() => data.patch(v.id, { derivatives: { [k]: !v.derivatives[k] } })}>{v.derivatives[k] && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.5"><path d="M5 12l5 5 9-10" /></svg>}</button>}</span>
             ))}
-            <span className="f" style={{ color: falta >= 3 ? "#B83A31" : falta ? "#9A6510" : "#2F8A5B" }}>{falta ? `${falta} pend.` : "ok"}</span>
+            <span className="f" style={{ color: falta >= 3 ? "#B83A31" : falta ? "#9A6510" : "#2F8A5B" }}>{falta ? `${falta} ${t("pend.")}` : t("ok")}</span>
           </div>
         );
       })}

@@ -1,4 +1,4 @@
-// Editor de texto estilo Notion (TipTap). Guarda markdown: o agente lê e escreve texto puro.
+// Notion-style text editor (TipTap). Stores markdown so the agent reads and writes plain text.
 import { useEffect, useRef, useState } from "react";
 import { BubbleMenu, EditorContent, FloatingMenu, Node, NodeViewWrapper, ReactNodeViewRenderer, mergeAttributes, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -9,13 +9,14 @@ import Image from "@tiptap/extension-image";
 import Placeholder from "@tiptap/extension-placeholder";
 import { Markdown } from "tiptap-markdown";
 import * as I from "./icons";
+import { t, dateLocale, weekdays, setLocale } from "./i18n";
 
-// só http(s) e caminhos internos; bloqueia javascript:, data: etc.
+// only http(s) and internal paths; blocks javascript:, data:, etc.
 const SAFE_URL = /^(https?:\/\/|\/(?!\/))/i;
 const YT_RE = /(?:youtube\.com\/(?:watch\?v=|shorts\/|live\/)|youtu\.be\/)([\w-]{11})/;
 const YT_LINE = /^\s*(?:\[[^\]]*\]\()?(https?:\/\/(?:www\.|m\.)?(?:youtube\.com|youtu\.be)\/\S+?)\)?\s*$/;
 
-// ---------- referência de vídeo (cartão pequeno) ----------
+// ---------- video reference (small card) ----------
 const ytCache: Record<string, Promise<{ title: string | null; author?: string }>> = {};
 export function YTRef({ id, label }: { id: string; label?: string }) {
   const [info, setInfo] = useState<{ title: string | null; author?: string } | null>(null);
@@ -25,7 +26,7 @@ export function YTRef({ id, label }: { id: string; label?: string }) {
   return (
     <a className="r-yt" href={`https://youtu.be/${id}`} target="_blank" rel="noreferrer" contentEditable={false}>
       <span className="r-yt-th"><img src={`https://i.ytimg.com/vi/${id}/mqdefault.jpg`} alt="" loading="lazy" /><I.YT w={14} /></span>
-      <span className="r-yt-tx"><b>{label || info?.title || "Vídeo do YouTube"}</b><small>{info?.author || "youtube.com"}</small></span>
+      <span className="r-yt-tx"><b>{label || info?.title || t("Vídeo do YouTube")}</b><small>{info?.author || "youtube.com"}</small></span>
     </a>
   );
 }
@@ -43,14 +44,14 @@ const YouTubeRef = Node.create({
     return (
       <NodeViewWrapper className={"yt-node" + (selected ? " sel" : "")} data-drag-handle>
         {id ? <YTRef id={id} /> : <span>{node.attrs.url}</span>}
-        <button className="yt-x" contentEditable={false} onClick={deleteNode} title="Remover">×</button>
+        <button className="yt-x" contentEditable={false} onClick={deleteNode} title={t("Remover")}>×</button>
       </NodeViewWrapper>
     );
   }),
   addStorage: () => ({ markdown: { serialize(state: any, node: any) { state.write(node.attrs.url); state.closeBlock(node); } } }),
 });
 
-// ---------- upload de print ----------
+// ---------- screenshot upload ----------
 export async function uploadImage(f: File | Blob, max = 1600): Promise<string> {
   const url = URL.createObjectURL(f);
   const img = await new Promise<HTMLImageElement>((res, rej) => { const i = new window.Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
@@ -76,19 +77,19 @@ const ic = {
 
 function blockItems(ed: Editor, pickImage: () => void) {
   return [
-    { k: "h1", l: "Título", i: ic.h1, on: ed.isActive("heading", { level: 1 }), run: () => ed.chain().focus().toggleHeading({ level: 1 }).run() },
-    { k: "h2", l: "Subtítulo", i: ic.h2, on: ed.isActive("heading", { level: 2 }), run: () => ed.chain().focus().toggleHeading({ level: 2 }).run() },
-    { k: "ul", l: "Lista", i: ic.ul, on: ed.isActive("bulletList"), run: () => ed.chain().focus().toggleBulletList().run() },
-    { k: "ol", l: "Lista numerada", i: ic.ol, on: ed.isActive("orderedList"), run: () => ed.chain().focus().toggleOrderedList().run() },
-    { k: "todo", l: "Checklist", i: ic.todo, on: ed.isActive("taskList"), run: () => ed.chain().focus().toggleTaskList().run() },
-    { k: "quote", l: "Citação", i: ic.quote, on: ed.isActive("blockquote"), run: () => ed.chain().focus().toggleBlockquote().run() },
-    { k: "img", l: "Print / imagem", i: ic.img, on: false, run: pickImage },
-    { k: "yt", l: "Vídeo do YouTube", i: ic.yt, on: false, run: () => { const u = prompt("Link do vídeo do YouTube"); if (u && YT_RE.test(u)) ed.chain().focus().insertContent({ type: "ytref", attrs: { url: u.trim() } }).run(); } },
-    { k: "hr", l: "Divisor", i: ic.hr, on: false, run: () => ed.chain().focus().setHorizontalRule().run() },
+    { k: "h1", l: t("Título"), i: ic.h1, on: ed.isActive("heading", { level: 1 }), run: () => ed.chain().focus().toggleHeading({ level: 1 }).run() },
+    { k: "h2", l: t("Subtítulo"), i: ic.h2, on: ed.isActive("heading", { level: 2 }), run: () => ed.chain().focus().toggleHeading({ level: 2 }).run() },
+    { k: "ul", l: t("Lista"), i: ic.ul, on: ed.isActive("bulletList"), run: () => ed.chain().focus().toggleBulletList().run() },
+    { k: "ol", l: t("Lista numerada"), i: ic.ol, on: ed.isActive("orderedList"), run: () => ed.chain().focus().toggleOrderedList().run() },
+    { k: "todo", l: t("Checklist"), i: ic.todo, on: ed.isActive("taskList"), run: () => ed.chain().focus().toggleTaskList().run() },
+    { k: "quote", l: t("Citação"), i: ic.quote, on: ed.isActive("blockquote"), run: () => ed.chain().focus().toggleBlockquote().run() },
+    { k: "img", l: t("Print / imagem"), i: ic.img, on: false, run: pickImage },
+    { k: "yt", l: t("Vídeo do YouTube"), i: ic.yt, on: false, run: () => { const u = prompt(t("Link do vídeo do YouTube")); if (u && YT_RE.test(u)) ed.chain().focus().insertContent({ type: "ytref", attrs: { url: u.trim() } }).run(); } },
+    { k: "hr", l: t("Divisor"), i: ic.hr, on: false, run: () => ed.chain().focus().setHorizontalRule().run() },
   ];
 }
 
-// ---------- campo ----------
+// ---------- field ----------
 export function Field({ value, onSave, placeholder, style }: { value: string; onSave: (s: string) => void; placeholder?: string; style?: React.CSSProperties }) {
   const last = useRef(value || "");
   const file = useRef<HTMLInputElement>(null);
@@ -103,7 +104,7 @@ export function Field({ value, onSave, placeholder, style }: { value: string; on
       TaskList, TaskItem.configure({ nested: true }),
       Link.configure({ openOnClick: true, autolink: true, protocols: ["http", "https"], isAllowedUri: (u: string) => SAFE_URL.test(u), HTMLAttributes: { target: "_blank", rel: "noopener noreferrer" } } as any),
       Image, YouTubeRef,
-      Placeholder.configure({ placeholder: ({ editor }) => (editor.isEmpty ? placeholder ?? "Escreva…" : "Digite ou use o + pra inserir blocos") }),
+      Placeholder.configure({ placeholder: ({ editor }) => (editor.isEmpty ? placeholder ?? t("Escreva…") : t("Digite ou use o + pra inserir blocos")) }),
       Markdown.configure({ html: false, linkify: true, breaks: true, transformPastedText: true }),
     ],
     content: value || "",
@@ -116,23 +117,23 @@ export function Field({ value, onSave, placeholder, style }: { value: string; on
     onBlur: ({ editor }) => { window.clearTimeout(timer.current); save(editor); },
   });
   const addImages = async (fs: File[]) => { if (!ed) return; for (const f of fs) { const u = await uploadImage(f); ed.chain().focus().setImage({ src: u, alt: "print" }).run(); } save(ed); };
-  // texto mudou fora (agente, outro painel) e o campo não está em uso: atualiza
+  // text changed elsewhere (agent, another panel) and the field is not focused: update
   useEffect(() => {
     if (!ed || ed.isFocused) return;
     if ((value || "") !== last.current) { last.current = value || ""; ed.commands.setContent(value || "", false); }
   }, [value, ed]);
   if (!ed) return null;
-  const link = () => { const prev = ed.getAttributes("link").href; const u = prompt("Link", prev || "https://"); if (u === null) return; if (!u) ed.chain().focus().unsetLink().run(); else if (SAFE_URL.test(u.trim())) ed.chain().focus().extendMarkRange("link").setLink({ href: u.trim() }).run(); else alert("Use um link http:// ou https://"); };
+  const link = () => { const prev = ed.getAttributes("link").href; const u = prompt("Link", prev || "https://"); if (u === null) return; if (!u) ed.chain().focus().unsetLink().run(); else if (SAFE_URL.test(u.trim())) ed.chain().focus().extendMarkRange("link").setLink({ href: u.trim() }).run(); else alert(t("Use um link http:// ou https://")); };
   return (
     <div className="rt-wrap">
       <BubbleMenu editor={ed} tippyOptions={{ duration: 120, placement: "top-start" }} shouldShow={({ editor, state }) => !state.selection.empty && !editor.isActive("ytref") && !editor.isActive("image")}>
         <div className="menu">
           {[
-            { k: "b", i: ic.bold, on: ed.isActive("bold"), run: () => ed.chain().focus().toggleBold().run(), t: "Negrito ⌘B" },
-            { k: "i", i: ic.italic, on: ed.isActive("italic"), run: () => ed.chain().focus().toggleItalic().run(), t: "Itálico ⌘I" },
-            { k: "s", i: ic.strike, on: ed.isActive("strike"), run: () => ed.chain().focus().toggleStrike().run(), t: "Riscado" },
-            { k: "c", i: ic.code, on: ed.isActive("code"), run: () => ed.chain().focus().toggleCode().run(), t: "Código" },
-            { k: "l", i: ic.link, on: ed.isActive("link"), run: link, t: "Link ⌘K" },
+            { k: "b", i: ic.bold, on: ed.isActive("bold"), run: () => ed.chain().focus().toggleBold().run(), t: t("Negrito ⌘B") },
+            { k: "i", i: ic.italic, on: ed.isActive("italic"), run: () => ed.chain().focus().toggleItalic().run(), t: t("Itálico ⌘I") },
+            { k: "s", i: ic.strike, on: ed.isActive("strike"), run: () => ed.chain().focus().toggleStrike().run(), t: t("Riscado") },
+            { k: "c", i: ic.code, on: ed.isActive("code"), run: () => ed.chain().focus().toggleCode().run(), t: t("Código") },
+            { k: "l", i: ic.link, on: ed.isActive("link"), run: link, t: t("Link ⌘K") },
           ].map((b) => <button key={b.k} className={b.on ? "on" : ""} title={b.t} onMouseDown={(e) => e.preventDefault()} onClick={b.run}>{b.i}</button>)}
           <span className="sep" />
           {blockItems(ed, () => file.current?.click()).slice(0, 6).map((b) => <button key={b.k} className={b.on ? "on" : ""} title={b.l} onMouseDown={(e) => e.preventDefault()} onClick={b.run}>{b.i}</button>)}
@@ -151,7 +152,7 @@ function PlusMenu({ items }: { items: { k: string; l: string; i: any; run: () =>
   const [open, setOpen] = useState(false);
   return (
     <div className="plus">
-      <button className="plus-b" title="Inserir bloco" onMouseDown={(e) => e.preventDefault()} onClick={() => setOpen(!open)}>+</button>
+      <button className="plus-b" title={t("Inserir bloco")} onMouseDown={(e) => e.preventDefault()} onClick={() => setOpen(!open)}>+</button>
       {open && (
         <div className="plus-pop" onMouseDown={(e) => e.preventDefault()}>
           {items.map((b) => <button key={b.k} onClick={() => { setOpen(false); b.run(); }}><span className="si">{b.i}</span>{b.l}</button>)}

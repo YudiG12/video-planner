@@ -9,7 +9,7 @@ export interface Video {
   history?: { actor: string; action: string; at: string }[];
 }
 export interface Channel { name: string; handle: string; avatar: string }
-export interface Boot { series: Series[]; sponsors: Sponsor[]; statuses: string[]; channel?: Channel }
+export interface Boot { series: Series[]; sponsors: Sponsor[]; statuses: string[]; channel?: Channel; locale?: string }
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(path, { ...init, headers: { "content-type": "application/json", ...(init?.headers || {}) } });

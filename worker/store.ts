@@ -1,4 +1,4 @@
-// Camada de dados única: a API REST e o MCP usam as mesmas funções.
+// Single data layer: the REST API and MCP share the same functions.
 export type Format = "longo" | "vertical";
 export const STATUSES = ["Ideias", "Esse mês", "Produzindo", "Editando", "Finalizado", "Cancelados"] as const;
 
@@ -88,7 +88,7 @@ export class Store {
       before.derivatives = cur.derivatives;
     }
     if (patch.script) {
-      // merge raso: o agente edita um bloco sem apagar os outros
+      // shallow merge: the agent edits one block without wiping the others
       sets.push("script = ?");
       args.push(JSON.stringify({ ...cur.script, ...patch.script }));
       before.script = cur.script;

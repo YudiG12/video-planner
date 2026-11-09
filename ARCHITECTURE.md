@@ -1,5 +1,9 @@
 # Architecture
 
+![Architecture](docs/architecture/architecture.png)
+
+<sub>Source: <a href="docs/architecture/draw.py">docs/architecture/draw.py</a>. README images: <a href="docs/assets/build.py">docs/assets/build.py</a>.</sub>
+
 ```
 browser ── Cloudflare Access ──► video-planner (Worker)
                                    ├─ static assets: React SPA (Vite)
@@ -20,3 +24,8 @@ both ──► D1 (SQLite): videos, series, sponsors, history, assets
 | Auth for agents | Separate Worker outside Access, `Authorization: Bearer AGENT_TOKEN`, constant-time compare | Agents can't do an interactive login. A second Worker keeps the human app fully behind Access. |
 | Fail closed | No secrets set = `401`; dev opens only with `DEV_OPEN=1` on `localhost` | A fresh deploy is never open to the internet. |
 | History | Every update stores actor (`owner` / `agente`), action and previous value | See what the agent changed; undo by hand. |
+
+## Data notes
+
+- Stored values stay in Portuguese (statuses `Ideias`, `Esse mês`, `Produzindo`, `Editando`, `Finalizado`, `Cancelados`; formats `longo`, `vertical`; script blocks `conteudo`, `insercao`…). The UI translates them on display (`src/i18n.ts`), so switching `LOCALE` never touches data.
+- Agents get the same names through MCP; tool descriptions explain them in English.

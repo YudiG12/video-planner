@@ -1,4 +1,4 @@
-// Ícones sempre coloridos (regra do brandbook).
+// Icons are always colored (brandbook rule).
 export const YT = ({ w = 18 }: { w?: number }) => (
   <svg width={w} height={(w * 13) / 18} viewBox="0 0 18 13"><rect width="18" height="13" rx="3" fill="#E5322D" /><path d="M7 3.5v6l5-3z" fill="#fff" /></svg>
 );
