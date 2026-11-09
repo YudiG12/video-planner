@@ -182,9 +182,9 @@ function Content({ sc, sp, set }: { sc: any; sp: any; set: (b: string, v: any) =
   );
 }
 
-function Card({ data, v, sel, onClick }: { data: Data; v: Video; sel: boolean; onClick: () => void }) {
+function Card({ data, v, sel, onClick, noDrag }: { data: Data; v: Video; sel: boolean; onClick: () => void; noDrag?: boolean }) {
   return (
-    <div className={`card ${v.format === "vertical" ? "ig" : ""} ${sel ? "sel" : ""}`} draggable
+    <div className={`card ${v.format === "vertical" ? "ig" : ""} ${sel ? "sel" : ""}`} draggable={!noDrag}
       onDragStart={(e) => { e.dataTransfer.setData("text/plain", v.id); e.dataTransfer.effectAllowed = "move"; window.dispatchEvent(new CustomEvent("vp-drag", { detail: v.id })); }}
       onDragEnd={() => window.dispatchEvent(new CustomEvent("vp-drag", { detail: null }))} onClick={onClick}>
       <span className="card-t">{v.title}</span>
@@ -235,7 +235,7 @@ function Kanban({ data, videos, openId, setOpenId, closing }: { data: Data; vide
         <span className="eyebrow">{t("Recentes")}</span>
         <div className="recent-row">
           {[...videos].filter((v) => v.status !== "Cancelados").sort((a, b) => ((b as any).updated_at || "").localeCompare((a as any).updated_at || "")).slice(0, 6)
-            .map((v) => <Card key={v.id} data={data} v={v} sel={openId === v.id} onClick={() => setOpenId(v.id)} />)}
+            .map((v) => <Card key={v.id} data={data} v={v} noDrag sel={openId === v.id} onClick={() => setOpenId(v.id)} />)}
         </div>
       </div>
       <div className="kanban">

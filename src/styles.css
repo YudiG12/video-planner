@@ -327,3 +327,7 @@ select,input[type=date]{border:1px solid var(--line);border-radius:var(--r);padd
 .recent-row .card{width:260px;flex-shrink:0}
 .serie-h{height:auto;min-height:0;padding:2px 2px 4px;gap:4px}
 .serie-h p{-webkit-line-clamp:2;height:34px}
+/* Recent row lines up with the kanban columns (290px column, 12px inner padding, 24px gap) */
+.recent-row{gap:24px;overflow:visible}
+.recent-row .card{width:264px;margin:0 13px;box-sizing:border-box}
+.kb-wrap>.recent{padding-left:32px;padding-right:32px}
