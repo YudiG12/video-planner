@@ -341,3 +341,5 @@ select,input[type=date]{border:1px solid var(--line);border-radius:var(--r);padd
 .kb-wrap>.recent{position:sticky;left:0;box-sizing:border-box;width:100%;max-width:100%}
 .recent-row{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;overflow:hidden}
 .recent-row .card{width:auto;margin:0;min-width:0}
+/* Recent strip: darker band than the kanban below */
+.kb-wrap>.recent{background:#F1F3F6;border-bottom:1px solid var(--line);padding-bottom:16px}
