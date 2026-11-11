@@ -6,6 +6,8 @@
   "compatibility_date": "2026-06-11",
   "workers_dev": true,
   "d1_databases": [{ "binding": "DB", "database_name": "video-planner", "database_id": "REPLACE_WITH_YOUR_D1_ID" }],
+  // Live updates hub, defined in the main Worker (deploy video-planner first)
+  "durable_objects": { "bindings": [{ "name": "LIVE", "class_name": "LiveHub", "script_name": "video-planner" }] },
   // Secret: AGENT_TOKEN (same value as the main Worker)
   "observability": { "enabled": true }
 }

@@ -357,3 +357,34 @@ select,input[type=date]{border:1px solid var(--line);border-radius:var(--r);padd
 /* script block conflict (someone else saved the block first) */
 .conflict{display:flex;flex-direction:column;gap:8px;margin:4px 0 12px;padding:12px 14px;border:1px solid #E0B4B4;border-left-width:3px;border-radius:var(--r);background:#FDF5F5;color:var(--ink-strong)}
 .conflict-theirs{margin:0;white-space:pre-wrap;font:inherit;font-size:14px;line-height:21px;max-height:220px;overflow:auto;padding:8px 10px;background:var(--bg);border:1px solid var(--line);border-radius:var(--r)}
+
+/* ---------- live updates: the agent is editing / changed a block ---------- */
+.card{position:relative}
+.dot-changed{position:absolute;top:8px;right:8px;width:8px;height:8px;border-radius:50%;background:#5A4BD1;box-shadow:0 0 0 3px rgba(90,75,209,.18)}
+.block,.ins{position:relative;transition:background-color .3s,box-shadow .3s;border-radius:var(--r)}
+.agent-editing{background:rgba(90,75,209,.05);box-shadow:0 0 0 1px rgba(90,75,209,.35),0 0 0 6px rgba(90,75,209,.06)}
+/* sweeping bar on top of the block while the agent writes */
+.agent-editing::before{content:"";position:absolute;left:0;right:0;top:-1px;height:2px;border-radius:2px;pointer-events:none;
+ background:linear-gradient(90deg,transparent,#5A4BD1 40%,#9C8FF0 60%,transparent);background-size:200% 100%;animation:agent-sweep 1.4s linear infinite}
+@keyframes agent-sweep{from{background-position:200% 0}to{background-position:-200% 0}}
+.agent-badge{position:absolute;top:-11px;right:8px;z-index:5;display:flex;align-items:center;gap:3px;padding:2px 8px 2px 6px;border-radius:10px;background:#5A4BD1;color:#fff;font-size:11px;font-weight:600}
+.agent-badge i{width:4px;height:4px;border-radius:50%;background:#fff;animation:agent-dot 1s ease-in-out infinite}
+.agent-badge i:nth-child(2){animation-delay:.15s}.agent-badge i:nth-child(3){animation-delay:.3s;margin-right:4px}
+@keyframes agent-dot{0%,100%{opacity:.3;transform:translateY(0)}50%{opacity:1;transform:translateY(-2px)}}
+.agent-changed{box-shadow:0 0 0 1px rgba(90,75,209,.22)}
+.change{display:flex;flex-direction:column;gap:8px;padding:12px 14px;border:1px solid #D9D4F7;border-left:3px solid #5A4BD1;border-radius:var(--r);background:#F8F7FE;color:var(--ink-strong)}
+.change-h{display:flex;align-items:center;gap:8px}
+.change-h b{flex:1;font-size:13px;color:#3F3399}
+.change-ok{padding:3px 10px;font-size:12px}
+.diff{white-space:pre-wrap;font-size:14px;line-height:22px;max-height:260px;overflow:auto;color:var(--ink)}
+.diff ins{text-decoration:none;background:#DDF4E4;color:#1D5B37;border-radius:2px;padding:0 1px}
+.diff del{background:#FBE3E1;color:#8E2C24;text-decoration:line-through;text-decoration-thickness:1.5px;border-radius:2px;padding:0 1px}
+.incoming{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 8px;padding:6px 10px;border-radius:var(--r);background:#F1EFFD;border:1px solid #D9D4F7;font-size:13px;color:#3F3399}
+.incoming .diff{flex-basis:100%;margin-top:4px;padding:6px 8px;background:#fff;border:1px solid var(--line);border-radius:var(--r)}
+.linkbtn{border:0;background:none;padding:0;color:#5A4BD1;font:inherit;font-weight:600;text-decoration:underline;cursor:pointer}
+@media (prefers-reduced-motion: reduce){
+  .agent-editing::before,.agent-badge i{animation:none}
+  .agent-editing::before{background:#5A4BD1}
+  .block,.ins{transition:none}
+}
+.rt-field{min-width:0}

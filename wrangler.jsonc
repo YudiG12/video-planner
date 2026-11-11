@@ -8,6 +8,9 @@
   "assets": { "not_found_handling": "single-page-application", "run_worker_first": ["/api/*", "/mcp"] },
   // `npm run setup` fills database_id
   "d1_databases": [{ "binding": "DB", "database_name": "video-planner", "database_id": "REPLACE_WITH_YOUR_D1_ID", "migrations_dir": "migrations" }],
+  // Live updates: one Durable Object (WebSocket hub) for the open app tabs; the agent Worker binds to it too
+  "durable_objects": { "bindings": [{ "name": "LIVE", "class_name": "LiveHub" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["LiveHub"] }],
   // Secrets (wrangler secret put): AGENT_TOKEN, ACCESS_TEAM_DOMAIN, ACCESS_AUD, CHANNEL_NAME, CHANNEL_HANDLE, AVATAR_URL
   "observability": { "enabled": true }
 }
