@@ -11,6 +11,8 @@ concurrency: { group: "auto-merge-${{ github.event.pull_request.number || github
 jobs:
   decide:
     runs-on: ubuntu-latest
+    # issue_comment also fires on plain issues: only PR comments matter
+    if: github.event_name != 'issue_comment' || github.event.issue.pull_request
     steps:
       - uses: actions/checkout@v4
         with: { ref: main }  # always run the trusted script from main, never from the PR

@@ -8,7 +8,7 @@
 
 # Verify a change (builder and verifier)
 
-`npm ci && npx playwright install chromium && npm run verify`
+Node 22+ (`.nvmrc`). `npm ci && npx playwright install chromium && npm run verify`
 
 Builds the app, runs it on a throwaway local D1 with fake demo data (never production), checks the API + MCP, and saves screenshots of every view to `verify-out/` plus `verify-out/report.json` (`verdict: PASS|FAIL`). `npm run verify -- --keep` leaves the server up to explore by hand.
 
