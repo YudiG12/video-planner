@@ -146,16 +146,19 @@ export class Store {
 
   // One script block: read with its version and previous value.
   async getBlock(id: string, block: string): Promise<Record<string, unknown> | BlockError> {
-    const cur = await this.get(id);
-    if (!cur) return { error: "not found", status: 404 };
-    const known = SCRIPT_BLOCKS[cur.format] ?? [];
-    if (!known.includes(block)) return { error: `unknown script block ${JSON.stringify(block)} for format ${cur.format} (allowed: ${known.join(", ")})`, status: 400 };
-    const r = await this.db.prepare("SELECT version, prev, actor, updated_at FROM script_blocks WHERE video_id = ? AND block = ?").bind(id, block)
-      .first<{ version: number; prev: string | null; actor: string | null; updated_at: string | null }>();
-    const version = r?.version ?? 0;
-    return { block, value: cur.script[block] ?? null, version,
-      previous: version > 0 ? { value: r!.prev == null ? null : JSON.parse(r!.prev), version: version - 1 } : null,
-      updated_by: r?.actor ?? null, updated_at: r?.updated_at ?? null };
+    // value, version and previous value come from ONE query, so they always belong together
+    const r = await this.db.prepare(`SELECT v.format, v.script -> ?1 AS value,
+        b.version, b.prev, b.actor, b.updated_at
+      FROM videos v LEFT JOIN script_blocks b ON b.video_id = v.id AND b.block = ?2 WHERE v.id = ?3`)
+      .bind(`$."${block.replace(/["\\]/g, "")}"`, block, id)
+      .first<{ format: Format; value: string | null; version: number | null; prev: string | null; actor: string | null; updated_at: string | null }>();
+    if (!r) return { error: "not found", status: 404 };
+    const known = SCRIPT_BLOCKS[r.format] ?? [];
+    if (!known.includes(block)) return { error: `unknown script block ${JSON.stringify(block)} for format ${r.format} (allowed: ${known.join(", ")})`, status: 400 };
+    const version = r.version ?? 0;
+    return { block, value: r.value == null ? null : JSON.parse(r.value), version,
+      previous: version > 0 ? { value: r.prev == null ? null : JSON.parse(r.prev), version: version - 1 } : null,
+      updated_by: r.actor ?? null, updated_at: r.updated_at ?? null };
   }
 
   // Write one script block. With baseVersion, the write only happens if the block is still at that version (else 409 conflict).
