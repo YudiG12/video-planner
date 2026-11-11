@@ -1,0 +1,19 @@
+name: Auto-merge
+# Merges a PR when Codex (the independent verifier) passes it and CI is green.
+# Waits for the owner when the PR touches security-sensitive paths, and trips a
+# circuit breaker after 2 failed verifications.
+on:
+  pull_request_review: { types: [submitted] }
+  issue_comment: { types: [created] }
+  workflow_run: { workflows: [CI], types: [completed] }
+permissions: { contents: write, pull-requests: write, issues: write, actions: write }
+concurrency: { group: "auto-merge-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}" }
+jobs:
+  decide:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number }}
+        run: bash .github/scripts/auto-merge.sh
