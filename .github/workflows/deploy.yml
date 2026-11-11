@@ -14,5 +14,6 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 20, cache: npm }
       - run: npm ci
+      - run: sed -i "s/REPLACE_WITH_YOUR_D1_ID/${{ secrets.D1_DATABASE_ID }}/" wrangler.jsonc wrangler.agent.jsonc
       - run: npm run db:migrate
       - run: npm run deploy

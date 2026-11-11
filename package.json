@@ -10,7 +10,8 @@
     "db:migrate": "wrangler d1 migrations apply video-planner --remote",
     "typecheck": "tsc --noEmit",
     "setup": "node scripts/setup.mjs",
-    "db:seed:demo": "wrangler d1 execute video-planner --local --file scripts/demo-seed.sql"
+    "db:seed:demo": "wrangler d1 execute video-planner --local --file scripts/demo-seed.sql",
+    "verify": "node scripts/verify.mjs"
   },
   "dependencies": {
     "@tiptap/extension-image": "^2.11.5",
@@ -33,6 +34,7 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "playwright": "^1.49.1",
     "typescript": "^5.7.2",
     "vite": "^6.0.7",
     "wrangler": "^4.159.0"

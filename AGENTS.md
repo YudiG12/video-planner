@@ -5,3 +5,27 @@
 3. `npm run setup` (creates D1, migrates, deploys both Workers, writes `.agent-token`).
 4. Tell the user to protect the `video-planner` Worker with Cloudflare Access (README, "Protect the app"), then set `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` with `wrangler secret put`. Never print or commit `.agent-token`.
 5. Register the MCP: `claude mcp add --transport http video-planner https://video-planner-agent.<subdomain>.workers.dev/mcp --header "Authorization: Bearer $(cat .agent-token)"`.
+
+# Verify a change (builder and verifier)
+
+`npm ci && npx playwright install chromium && npm run verify`
+
+Builds the app, runs it on a throwaway local D1 with fake demo data (never production), checks the API + MCP, and saves screenshots of every view to `verify-out/` plus `verify-out/report.json` (`verdict: PASS|FAIL`). `npm run verify -- --keep` leaves the server up to explore by hand.
+
+**Verifier (Codex):** you did not write this code. Run `npm run verify`, then check the PR's "Done when…" items yourself against the running app (`--keep`) and the screenshots. Reply on the PR with `VERDICT: PASS` or `VERDICT: FAIL` + what failed, and attach the relevant screenshots. Don't fix the code.
+
+**Builder (Claude):** a PR is ready only when `npm run verify` passes. If you add a feature, add its check to `scripts/verify.mjs` and a line to the map below. Attach screenshots to the PR and write a short decisions log with an "Attention" section.
+
+## Feature map
+
+| Feature | Where | Checked by verify |
+|---|---|---|
+| Kanban (drag between statuses, Recent strip) | `src/App.tsx` Kanban | ui: kanban |
+| Calendar by publish date | `src/App.tsx` Calendar | ui: calendario |
+| Derivatives checklist | `src/App.tsx` Derivados | ui: derivados |
+| Ideas by series (long-form first, series logo) | `src/App.tsx` Ideias | ui: ideias |
+| Video panel: script blocks, hook, series line, YT preview | `src/App.tsx` Panel/Script | ui: video panel |
+| REST API: videos CRUD, bootstrap | `worker/index.ts`, `worker/store.ts` | api: * |
+| Image assets (png/jpeg/webp/gif, 1.5 MB) | `saveAsset` in `worker/store.ts` | api: upload / rejects |
+| MCP tools (list/create/update/move videos, script blocks, upload_image) | `worker/mcp.ts` | mcp: * |
+| Auth: Cloudflare Access JWT or agent Bearer; localhost only with `DEV_OPEN=1` | `worker/index.ts` middleware | — (sensitive: human review) |
