@@ -1,5 +1,6 @@
 name: CI
 on: [pull_request]
+permissions: { contents: write, pull-requests: write }
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -10,10 +11,30 @@ jobs:
         with: { node-version: 22, cache: npm }
       - run: npm ci
       - run: npm run typecheck
-      - run: npx playwright install --with-deps chromium
-      - run: npm run verify
+      - uses: gitleaks/gitleaks-action@v2
+        env: { GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
+      - run: sudo apt-get install -y ffmpeg >/dev/null && npx playwright install --with-deps chromium
+      - id: verify
+        run: npm run verify
+        continue-on-error: true
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: verify-out, path: verify-out }
-      - uses: gitleaks/gitleaks-action@v2
-        env: { GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
+      # Proof comment: images go to the verify-assets branch, comment is updated in place
+      - name: Publish proof on the PR
+        if: always() && hashFiles('verify-out/report.json') != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          dir=pr-$PR/$SHA
+          git config user.name github-actions && git config user.email github-actions@users.noreply.github.com
+          git worktree add -q /tmp/assets $(git ls-remote --exit-code origin verify-assets >/dev/null && echo "origin/verify-assets -B verify-assets" || echo "--orphan verify-assets")
+          mkdir -p /tmp/assets/$dir && cp verify-out/*.png verify-out/*.gif /tmp/assets/$dir/ 2>/dev/null || true
+          (cd /tmp/assets && git add -A && git commit -qm "proof $dir" && git push -q origin verify-assets)
+          node scripts/pr-proof.mjs "$GITHUB_REPOSITORY" "$PR" "$SHA" > proof.md
+          id=$(gh api repos/$GITHUB_REPOSITORY/issues/$PR/comments -q '.[] | select(.body | startswith("<!-- pr-proof -->")) | .id' | head -1)
+          if [ -n "$id" ]; then gh api -X PATCH repos/$GITHUB_REPOSITORY/issues/comments/$id -F body=@proof.md >/dev/null; else gh pr comment $PR --body-file proof.md; fi
+      - if: steps.verify.outcome == 'failure'
+        run: exit 1

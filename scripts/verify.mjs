@@ -91,6 +91,19 @@ await check("ui: full-screen video page", async () => {
   await page.screenshot({ path: `${OUT}/video-full.png`, fullPage: true });
 });
 await check("ui: no console errors", async () => assert(errors.length === 0, errors.slice(0, 3).join(" | ")));
+// ---- GIF of the main flow (needs ffmpeg; skipped if missing) ----
+await check("ui: record main flow", async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, recordVideo: { dir: `${OUT}/video`, size: { width: 1280, height: 800 } } });
+  const p = await ctx.newPage();
+  await p.goto(`${BASE}/kanban`, { waitUntil: "networkidle" }); await p.waitForTimeout(800);
+  await p.locator(".card", { hasText: "How a database index actually works" }).first().click(); await p.waitForTimeout(1200);
+  await p.mouse.move(1000, 500); await p.mouse.wheel(0, 500); await p.waitForTimeout(1000);
+  await p.goto(`${BASE}/ideias`, { waitUntil: "networkidle" }); await p.waitForTimeout(1000);
+  await p.goto(`${BASE}/calendario`, { waitUntil: "networkidle" }); await p.waitForTimeout(1000);
+  const vid = await p.video().path(); await ctx.close();
+  try { execSync(`ffmpeg -y -loglevel error -i ${vid} -vf "fps=8,scale=900:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse" ${OUT}/flow.gif`); }
+  catch { console.log("      (ffmpeg not found: kept webm only)"); }
+});
 await browser.close();
 
 const failed = results.filter((r) => !r.ok);
