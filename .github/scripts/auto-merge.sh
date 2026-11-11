@@ -12,7 +12,8 @@ head=$(gh pr view "$PR" --json headRefOid -q .headRefOid)
 # Codex verdicts on this PR (reviews + comments by the Codex bot)
 codex=$(gh api "repos/$R/pulls/$PR/reviews" --paginate -q '.[] | select(.user.login|test("codex")) | .body'
         gh api "repos/$R/issues/$PR/comments" --paginate -q '.[] | select(.user.login|test("codex")) | .body')
-pass=$(printf '%s' "$codex" | grep -ciE "VERDICT: *PASS|Didn't find any major issues" || true)
+# PASS must be about the current head commit (Codex writes "Reviewed commit: `<sha10>`")
+pass=$(printf '%s' "$codex" | tr '\n' ' ' | grep -oE "(Didn't find any major issues|VERDICT: *PASS)[^<]{0,400}Reviewed commit:\*\* *\`[0-9a-f]+|VERDICT: *PASS[^@]{0,200}${head:0:7}" | grep -c "${head:0:7}" || true)
 fail=$(gh api "repos/$R/pulls/$PR/comments" --paginate -q '[.[] | select(.user.login|test("codex")) | .commit_id] | unique | length')
 fail=$(( fail + $(printf '%s' "$codex" | grep -ciE "VERDICT: *FAIL" || true) ))
 
