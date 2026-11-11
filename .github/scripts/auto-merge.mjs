@@ -3,8 +3,8 @@
 const { GITHUB_REPOSITORY: R, GH_TOKEN, PR, DRY_RUN } = process.env;
 const CODEX = "chatgpt-codex-connector[bot]";
 // Owner rule: wait only for changes that could LOOSEN security (auth, Access, tokens, CORS, public routes, workers_dev)
-// or that change the pipeline itself. New infra (bindings, Durable Objects, queues) merges like any other change.
-const SENSITIVE_PATH = /^(worker\/agent\.ts|SECURITY\.md|\.github\/)/;
+// Pipeline changes (.github/) and new infra (bindings, Durable Objects, queues) merge like any other change (owner's call).
+const SENSITIVE_PATH = /^(worker\/agent\.ts|SECURITY\.md)/;
 const SENSITIVE_CODE = /cf-access|ACCESS_|AGENT_TOKEN|DEV_OPEN|workers_dev|preview_urls|"routes?"\s*:|custom_domain|Access-Control|cors|safeEqual|unauthorized/i;
 const TEST_ONLY = /^(scripts\/verify\.mjs|scripts\/demo-seed\.sql)$/; // local verify app: throwaway tokens, never deployed
 
@@ -66,7 +66,7 @@ if ((repeated || failedShas.size >= MAX_ROUNDS) && !latest?.pass) {
 const files = await all(`/pulls/${PR}/files`);
 const reasons = [];
 for (const f of files) {
-  if (SENSITIVE_PATH.test(f.filename)) { reasons.push(`\`${f.filename}\` (${f.filename.startsWith(".github/") ? "pipeline" : "auth"} file)`); continue; }
+  if (SENSITIVE_PATH.test(f.filename)) { reasons.push(`\`${f.filename}\` (auth file)`); continue; }
   if (TEST_ONLY.test(f.filename)) continue;
   const lines = (f.patch || "").split("\n").filter((l) => /^[+-]/.test(l) && !/^(\+\+\+|---)/.test(l) && SENSITIVE_CODE.test(l));
   for (const l of lines.slice(0, 3)) reasons.push(`\`${f.filename}\`: \`${l.trim().slice(0, 140).replace(/`/g, "'")}\``);
@@ -74,7 +74,7 @@ for (const f of files) {
 const uninspectable = files.length >= 3000 || files.some((f) => !f.patch && f.status !== "removed" && /\.(ts|tsx|js|mjs|jsonc?)$/.test(f.filename));
 if (reasons.length || uninspectable) {
   await label("needs-owner");
-  await comment(`✋ **Waiting for @YudiG12:** this PR may loosen security or changes the pipeline. Lines that triggered it:\n\n${reasons.map((r) => `- ${r}`).join("\n") || "- diff too large to inspect"}\n\nIf none of these loosen anything, remove the \`needs-owner\` label and it merges on the next Codex PASS.`);
+  await comment(`✋ **Waiting for @YudiG12:** this PR may loosen security. Lines that triggered it:\n\n${reasons.map((r) => `- ${r}`).join("\n") || "- diff too large to inspect"}\n\nIf none of these loosen anything, remove the \`needs-owner\` label and it merges on the next Codex PASS.`);
   stop("sensitive");
 }
 
