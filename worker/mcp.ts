@@ -15,6 +15,8 @@ const TOOLS = [
     inputSchema: { type: "object", properties: { id: str("id"), block: str("block name"), value: { description: "block content (string or object)" } }, required: ["id", "block", "value"] } },
   { name: "upload_image", description: "Upload a print/screenshot (data URL: data:image/png|jpeg|webp|gif;base64,..., max 1.5 MB). Returns { url }. Embed it in a script block as markdown ![print](url) right under the line where it is mentioned.",
     inputSchema: { type: "object", properties: { data: str("data URL of the image") }, required: ["data"] } },
+  { name: "update_series", description: "Update a series' look: logo (url returned by upload_image, e.g. /api/assets/<id>; null clears it and shows the name instead), color (text/accent, #RRGGBB), bg (column background, #RRGGBB), description. Only the fields you pass change. The logo shows in the Ideas column header and on the cards.",
+    inputSchema: { type: "object", properties: { id: str("series id (see list_series)"), logo: { type: ["string", "null"], description: "asset URL from upload_image, or null" }, color: str("#RRGGBB"), bg: str("#RRGGBB"), description: { type: ["string", "null"] } }, required: ["id"] } },
   { name: "list_series", description: "List series, sponsors and valid statuses.", inputSchema: { type: "object", properties: {} } },
   { name: "next_episode", description: "Next episode number for a series.", inputSchema: { type: "object", properties: { series_id: str("series id") }, required: ["series_id"] } },
 ];
@@ -28,6 +30,7 @@ async function call(store: Store, name: string, a: any) {
     case "move_video": return store.move(a.id, a.status, a.position);
     case "update_script_block": return store.update(a.id, { script: { [a.block]: a.value } });
     case "upload_image": { const r = await saveAsset(store.database, a.data); if ("error" in r) throw new Error(r.error); return r; }
+    case "update_series": { const { id, ...rest } = a; const r = await store.updateSeries(id, rest); if ("error" in r) throw new Error(String(r.error)); return r; }
     case "list_series": return store.bootstrap();
     case "next_episode": return { episode: await store.nextEpisode(a.series_id) };
     default: throw new Error(`unknown tool: ${name}`);

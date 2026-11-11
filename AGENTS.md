@@ -28,6 +28,7 @@ Builds the app, runs it on a throwaway local D1 with fake demo data (never produ
 | REST API: videos CRUD, bootstrap | `worker/index.ts`, `worker/store.ts` | api: * |
 | Image assets (png/jpeg/webp/gif, 1.5 MB) | `saveAsset` in `worker/store.ts` | api: upload / rejects |
 | MCP tools (list/create/update/move videos, script blocks, upload_image) | `worker/mcp.ts` | mcp: * |
+| Update a series (logo, color, bg, description): MCP `update_series`, REST `PATCH /api/series/:id` | `updateSeries` in `worker/store.ts`, `worker/mcp.ts`, `worker/index.ts` | api: update series * / mcp: update_series |
 | Auth: Cloudflare Access JWT or agent Bearer; localhost only with `DEV_OPEN=1` | `worker/index.ts` middleware | — (sensitive: human review) |
 
 # Pipeline (issue → PR → verify → merge → deploy)
