@@ -47,6 +47,7 @@ input,textarea{font:inherit;color:var(--ink-strong)}
 .panel-top{display:flex;justify-content:space-between;align-items:center}
 .meta{display:flex;align-items:center;gap:10px}
 .serie{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:var(--r);align-self:flex-start}
+.serie .serie-logo{height:28px;width:auto;max-width:96px;object-fit:contain;flex-shrink:0}
 .serie .logo-ph{width:24px;height:24px;border-radius:var(--r);border:1.5px dashed currentColor}
 .serie b{font-size:14px}
 .serie .ep{font-family:"JetBrains Mono",monospace;font-size:12px;font-weight:600}
@@ -343,3 +344,12 @@ select,input[type=date]{border:1px solid var(--line);border-radius:var(--r);padd
 .recent-row .card{width:auto;margin:0;min-width:0}
 /* Recent strip: darker band than the kanban below */
 .kb-wrap>.recent{background:#F1F3F6;border-bottom:1px solid var(--line);padding-bottom:16px}
+.serie-cover{position:relative;height:56px;display:flex;align-items:center;justify-content:center;gap:8px;flex-shrink:0}
+.serie-cover span{position:absolute;right:0;top:50%;transform:translateY(-50%);font-family:"JetBrains Mono",monospace;font-size:12px}
+.serie-cover img{height:48px;width:auto;max-width:75%;object-fit:contain}
+.serie-h:has(.serie-cover){height:auto}
+.tag-logo{display:flex;align-items:center;height:24px;box-sizing:border-box}
+.tag-logo img{height:24px;width:auto;display:block}
+.serie-box{margin-top:12px;padding:12px 14px;border:1px solid;border-left-width:3px;border-radius:var(--r);display:flex;flex-direction:column;gap:6px}
+.serie-box .eyebrow{display:flex;align-items:center;gap:8px}
+.serie-box .eyebrow img{height:20px;width:auto}

@@ -1,5 +1,5 @@
 export type Format = "longo" | "vertical";
-export interface Series { id: string; name: string; format: Format; color: string; bg: string; description: string | null; phrase_open: string | null; phrase_close: string | null; position: number }
+export interface Series { id: string; name: string; format: Format; color: string; bg: string; description: string | null; phrase_open: string | null; phrase_close: string | null; position: number; logo?: string | null }
 export interface Sponsor { id: string; name: string; logo: string | null }
 export interface Video {
   id: string; title: string; format: Format; status: string;

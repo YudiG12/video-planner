@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { Store } from "./store";
+import { Store, saveAsset } from "./store";
 import { handleMcp } from "./mcp";
 
 type Env = {
@@ -94,13 +94,9 @@ app.get("/api/yt-title", async (c) => {
 app.post("/api/assets", async (c) => {
   if (Number(c.req.header("content-length") || 0) > 2_100_000) return c.json({ error: "image too large" }, 413);
   const { data } = await c.req.json<{ data: string }>();
-  if (typeof data !== "string" || data.length > 2_100_000) return c.json({ error: "image too large" }, 413);
-  const m = /^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/=]+)$/.exec(data);
-  if (!m) return c.json({ error: "invalid image" }, 400);
-  const bytes = Uint8Array.from(atob(m[2]), (ch) => ch.charCodeAt(0));
-  if (bytes.length > 1_500_000) return c.json({ error: "image too large" }, 413);
-  const id = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
-  await c.env.DB.prepare("INSERT INTO assets (id, mime, data) VALUES (?, ?, ?)").bind(id, m[1], bytes).run();
+  const r = await saveAsset(c.env.DB, data);
+  if ("error" in r) return c.json({ error: r.error }, r.status as 400 | 413);
+  const { id } = r;
   return c.json({ id, url: `/api/assets/${id}` }, 201);
 });
 app.get("/api/assets/:id", async (c) => {

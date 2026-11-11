@@ -14,7 +14,7 @@ const EN: Record<string, string> = {
   "Editar thumbnail": "Edit thumbnail", "Enviar imagem": "Upload image", "Remover imagem": "Remove image",
   "Descrição da thumb (texto, ideia ou URL)": "Thumbnail note (text, idea or URL)",
   "1 · Hook": "1 · Hook", "1 · Gancho": "1 · Hook", "2 · Conteúdo": "2 · Content", "3 · Conclusão": "3 · Conclusion",
-  "Confirmação": "Confirmation", "Promessa": "Promise", "Curiosidade": "Curiosity", "Pessoalidade": "Personal",
+  "Confirmação": "Confirmation", "Promessa": "Promise", "Curiosidade": "Curiosity", "Pessoalidade": "Personal", "Fala da série": "Series line",
   "Inserção": "Sponsor segment", "Onde entra e o que falar…": "Where it goes and what to say…", "Sua reflexão final…": "Your closing thought…",
   "Escreva…": "Write…", "Digite ou use o + pra inserir blocos": "Type, or use + to insert blocks",
   "Frase da série": "Series line", "Fechamento": "Closing", "Sem capa": "No cover", "Clique pra colar a URL da capa": "Click to paste the cover URL",
