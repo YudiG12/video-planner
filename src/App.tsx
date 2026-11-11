@@ -613,7 +613,7 @@ function fileToThumb(f: File): Promise<string> {
   });
 }
 
-function ThumbBox({ thumb, note, save }: { thumb?: string; note?: string; save: (p: { thumb?: string; thumb_note?: string }) => void }) {
+function ThumbBox({ thumb, note, save, version }: { thumb?: string; note?: string; save: (p: { thumb?: string; thumb_note?: string }, base?: number) => void; version?: number }) {
   const [edit, setEdit] = useState(false);
   const isImg = !!thumb && /^(https?:|\/|data:image)/.test(thumb);
   const text = isImg ? note : (note || thumb);
@@ -627,9 +627,9 @@ function ThumbBox({ thumb, note, save }: { thumb?: string; note?: string; save: 
           <input ref={fileRef} type="file" accept="image/*" hidden onChange={async (e) => { const f = e.target.files?.[0]; if (f) { save({ thumb: await fileToThumb(f) }); setEdit(false); } }} />
           <button className="btn-dark" onClick={() => fileRef.current?.click()}>{t("Enviar imagem")}</button>
           {isImg && <button className="btn-ghost" onClick={() => { save({ thumb: "" }); setEdit(false); }}>{t("Remover imagem")}</button>}
-          <SyncTextarea className="ta" placeholder={t("Descrição da thumb (texto, ideia ou URL)")} value={text || ""} onSave={(raw) => {
+          <SyncTextarea className="ta" placeholder={t("Descrição da thumb (texto, ideia ou URL)")} value={text || ""} version={version} onSave={(raw, base) => {
             const val = raw.trim();
-            if (/^https?:\/\/\S+$/.test(val)) save({ thumb: val }); else if (val !== (text || "")) save(isImg ? { thumb_note: val } : { thumb: "", thumb_note: val });
+            if (/^https?:\/\/\S+$/.test(val)) save({ thumb: val }, base); else if (val !== (text || "")) save(isImg ? { thumb_note: val } : { thumb: "", thumb_note: val }, base);
           }} />
         </div>
       )}
@@ -639,10 +639,23 @@ function ThumbBox({ thumb, note, save }: { thumb?: string; note?: string; save: 
 
 // Plain textarea that saves on blur. When the value changes elsewhere (e.g. "Use the newer version" after a conflict)
 // and the field is not being edited, it shows the new value, so a later blur can't save text that was rejected.
-function SyncTextarea({ value, onSave, ...rest }: { value: string; onSave: (s: string) => void } & Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, "value" | "defaultValue" | "onBlur">) {
+// `version` is the block version of `value`; onSave gets the version the shown text was based on. Like Field, the base only
+// moves forward while the textarea shows that version's text, so a live change arriving mid-typing makes the save conflict.
+function SyncTextarea({ value, version, onSave, ...rest }: { value: string; version?: number; onSave: (s: string, base?: number) => void } & Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, "value" | "defaultValue" | "onBlur">) {
   const ref = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => { const el = ref.current; if (el && document.activeElement !== el && el.value !== value) el.value = value; }, [value]);
-  return <textarea ref={ref} {...rest} defaultValue={value} onBlur={(e) => e.target.value !== value && onSave(e.target.value)} />;
+  const shown = useRef(value), base = useRef(version);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (value === shown.current) { base.current = version; return; }
+    if (document.activeElement === el) return; // owner is typing: keep their text and the base it started from
+    el.value = value; shown.current = value; base.current = version;
+  }, [value, version]);
+  return <textarea ref={ref} {...rest} defaultValue={value} onBlur={(e) => {
+    const x = e.target.value;
+    if (x !== shown.current) { onSave(x, base.current); shown.current = x; }
+    else if (x !== value) { e.target.value = value; shown.current = value; base.current = version; } // untouched: take the newer value
+  }} />;
 }
 
 function YTPreview({ data, v, cls = "" }: { data: Data; v: Video; cls?: string }) {
@@ -650,10 +663,10 @@ function YTPreview({ data, v, cls = "" }: { data: Data; v: Video; cls?: string }
   const [cut, setCutRaw] = useState(() => { try { return localStorage.getItem("vp-cut-title") === "1"; } catch { return false; } });
   const setCut = (v: boolean) => { setCutRaw(v); try { localStorage.setItem("vp-cut-title", v ? "1" : "0"); } catch {} };
   const pairs: { title?: string; thumb?: string }[] = v.script.pairs || [{}, {}, {}];
-  const save = (i: number, p: { title?: string; thumb?: string; thumb_note?: string }) => {
+  const save = (i: number, p: { title?: string; thumb?: string; thumb_note?: string }, base = v.script_versions?.pairs ?? 0) => {
     const next = [0, 1, 2].map((j) => (j === i ? { ...pairs[j], ...p } : pairs[j] || {}));
     // based on the version whose text the inputs show (the owner's base while in conflict)
-    data.saveBlock(v.id, "pairs", next, v.script_versions?.pairs ?? 0);
+    data.saveBlock(v.id, "pairs", next, base);
   };
   return (
     <div className={"block" + cls}>
@@ -669,13 +682,13 @@ function YTPreview({ data, v, cls = "" }: { data: Data; v: Video; cls?: string }
           return (
             <div className="yt-item" key={i}>
               <div className="yt-n">{i + 1}{i === 0 && <span className="p">{t("PRINCIPAL")}</span>}</div>
-              <ThumbBox thumb={p.thumb} note={(p as any).thumb_note} save={(q) => save(i, q)} />
+              <ThumbBox thumb={p.thumb} note={(p as any).thumb_note} version={v.script_versions?.pairs ?? 0} save={(q, b) => save(i, q, b)} />
               <div className="yt-info">
                 <img className="avatar" src={ch(data).avatar} alt="" />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   {cut && p.title && p.title.length > 60
                     ? <span className="yt-title" title={p.title} onClick={() => setCut(false)}>{p.title.slice(0, 58)}…</span>
-                    : <SyncTextarea className="yt-title" rows={1} placeholder={t("Título…")} value={p.title || ""} onSave={(x) => save(i, { title: x })} />}
+                    : <SyncTextarea className="yt-title" rows={1} placeholder={t("Título…")} value={p.title || ""} version={v.script_versions?.pairs ?? 0} onSave={(x, b) => save(i, { title: x }, b)} />}
                   <div className="yt-ch">{ch(data).name} · {p.title ? `${p.title.length} ${t("caracteres")}` : "—"}</div>
                 </div>
               </div>

@@ -211,15 +211,20 @@ await check("ui: conflict shows the newer text and keeps what the owner typed", 
   assert(/Plus my extra line\. Revised after the conflict\./.test(k.body.value) && k.body.previous?.value === "Agent rewrote the ending.", JSON.stringify(k.body));
   assert(/Revised after the conflict\./.test(await ed.innerText()), "editor reverted to an older draft");
 });
-await check("ui: accepting the newer title version updates the title input (no silent undo)", async () => {
+await check("ui: a live title change while the owner types conflicts; accepting it updates the input (no silent undo)", async () => {
   const c = await api("/api/videos", { method: "POST", body: JSON.stringify({ title: "verify titles", format: "longo" }) }); const id = c.body.id;
   await page.goto(`${BASE}/kanban#/video/${id}`, { waitUntil: "networkidle" }); await page.reload({ waitUntil: "networkidle" }); // load the new video
   const title = page.locator("textarea.yt-title").first(); await title.waitFor({ timeout: 5000 });
-  // the agent sets the titles while the page is open, then the owner types a different first title
+  // the owner is in the title field when the agent's titles arrive live (no reload); the owner then types and leaves:
+  // their save is based on the version they saw, so it must conflict instead of overwriting the agent's title
+  await title.click();
+  const refreshed = page.waitForResponse((r) => new URL(r.url()).pathname === "/api/videos" && r.request().method() === "GET", { timeout: 3000 });
   const agent = await put(id, "pairs", { value: [{ title: "Agent newer title" }, {}, {}], base_version: 0 }); assert(agent.status === 200 && agent.body.version === 1, `agent ${agent.status}`);
-  await title.click(); await page.keyboard.type("Owner conflicting title");
+  await refreshed; await page.waitForTimeout(100); // the live update landed while the field had focus
+  await page.keyboard.type("Owner conflicting title");
   await page.evaluate(() => document.activeElement?.blur());
   const note = page.locator('.conflict[data-block="pairs"]'); await note.waitFor({ timeout: 5000 });
+  const mid = await api(`/api/videos/${id}/script/pairs`); assert(mid.body.value?.[0]?.title === "Agent newer title", `owner's blur overwrote the agent's title: ${JSON.stringify(mid.body.value)}`);
   await note.getByRole("button", { name: /Use the newer|Usar a vers/ }).click();
   await note.waitFor({ state: "detached", timeout: 5000 });
   assert((await title.inputValue()) === "Agent newer title", `title input shows "${await title.inputValue()}"`);
