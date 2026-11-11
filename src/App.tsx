@@ -489,14 +489,22 @@ function ThumbBox({ thumb, note, save }: { thumb?: string; note?: string; save: 
           <input ref={fileRef} type="file" accept="image/*" hidden onChange={async (e) => { const f = e.target.files?.[0]; if (f) { save({ thumb: await fileToThumb(f) }); setEdit(false); } }} />
           <button className="btn-dark" onClick={() => fileRef.current?.click()}>{t("Enviar imagem")}</button>
           {isImg && <button className="btn-ghost" onClick={() => { save({ thumb: "" }); setEdit(false); }}>{t("Remover imagem")}</button>}
-          <textarea className="ta" placeholder={t("Descrição da thumb (texto, ideia ou URL)")} defaultValue={text || ""} onBlur={(e) => {
-            const val = e.target.value.trim();
+          <SyncTextarea className="ta" placeholder={t("Descrição da thumb (texto, ideia ou URL)")} value={text || ""} onSave={(raw) => {
+            const val = raw.trim();
             if (/^https?:\/\/\S+$/.test(val)) save({ thumb: val }); else if (val !== (text || "")) save(isImg ? { thumb_note: val } : { thumb: "", thumb_note: val });
           }} />
         </div>
       )}
     </div>
   );
+}
+
+// Plain textarea that saves on blur. When the value changes elsewhere (e.g. "Use the newer version" after a conflict)
+// and the field is not being edited, it shows the new value, so a later blur can't save text that was rejected.
+function SyncTextarea({ value, onSave, ...rest }: { value: string; onSave: (s: string) => void } & Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, "value" | "defaultValue" | "onBlur">) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => { const el = ref.current; if (el && document.activeElement !== el && el.value !== value) el.value = value; }, [value]);
+  return <textarea ref={ref} {...rest} defaultValue={value} onBlur={(e) => e.target.value !== value && onSave(e.target.value)} />;
 }
 
 function YTPreview({ data, v }: { data: Data; v: Video }) {
@@ -506,7 +514,8 @@ function YTPreview({ data, v }: { data: Data; v: Video }) {
   const pairs: { title?: string; thumb?: string }[] = v.script.pairs || [{}, {}, {}];
   const save = (i: number, p: { title?: string; thumb?: string; thumb_note?: string }) => {
     const next = [0, 1, 2].map((j) => (j === i ? { ...pairs[j], ...p } : pairs[j] || {}));
-    data.saveBlock(v.id, "pairs", next);
+    // based on the version whose text the inputs show (the owner's base while in conflict)
+    data.saveBlock(v.id, "pairs", next, v.script_versions?.pairs ?? 0);
   };
   return (
     <div className="block">
@@ -528,7 +537,7 @@ function YTPreview({ data, v }: { data: Data; v: Video }) {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   {cut && p.title && p.title.length > 60
                     ? <span className="yt-title" title={p.title} onClick={() => setCut(false)}>{p.title.slice(0, 58)}…</span>
-                    : <textarea className="yt-title" rows={1} placeholder={t("Título…")} defaultValue={p.title || ""} onBlur={(e) => e.target.value !== (p.title || "") && save(i, { title: e.target.value })} />}
+                    : <SyncTextarea className="yt-title" rows={1} placeholder={t("Título…")} value={p.title || ""} onSave={(x) => save(i, { title: x })} />}
                   <div className="yt-ch">{ch(data).name} · {p.title ? `${p.title.length} ${t("caracteres")}` : "—"}</div>
                 </div>
               </div>
