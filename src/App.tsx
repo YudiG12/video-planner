@@ -13,7 +13,14 @@ function useData() {
   const [boot, setBoot] = useState<Boot | null>(null);
   const [videos, setVideos] = useState<Video[]>([]);
   // script blocks whose save was rejected because someone else changed them first; key `${videoId}:${block}`
-  const [conflicts, setConflicts] = useState<Record<string, Conflict>>({});
+  const [conflicts, setConflictsState] = useState<Record<string, Conflict>>({});
+  // kept in a ref too, so queued saves see the latest conflict (state updates land a render later)
+  const cref = useRef(conflicts);
+  const setConflict = (key: string, c: Conflict | null) => {
+    const { [key]: _, ...rest } = cref.current;
+    cref.current = c ? { ...rest, [key]: c } : rest;
+    setConflictsState(cref.current);
+  };
   const vref = useRef(videos); vref.current = videos;
   const queue = useRef<Record<string, Promise<unknown>>>({});
   const advanced = useRef<Record<string, Record<number, number>>>({}); // own saves: base -> new version
@@ -21,30 +28,41 @@ function useData() {
   useEffect(() => { api.boot().then((b) => { setLocale(b.locale); document.documentElement.lang = b.locale || "en"; setBoot(b); }); reload(); }, []);
   const setLocal = (id: string, block: string, value: any, version?: number) => setVideos((vs) => vs.map((v) => (v.id === id
     ? { ...v, script: { ...v.script, [block]: value }, script_versions: version == null ? v.script_versions : { ...v.script_versions, [block]: version } } : v)));
-  // Save one block with the version it was based on. Saves of the same block run one at a time; a save based on a version
-  // that our own previous save replaced is moved forward (our edits build on each other), anything else conflicts.
-  const saveBlock = (id: string, block: string, value: any, base?: number) => {
-    const key = `${id}:${block}`;
-    setLocal(id, block, value);
-    const run = async () => {
-      let b = base ?? vref.current.find((v) => v.id === id)?.script_versions?.[block] ?? 0;
-      while (advanced.current[key]?.[b] != null) b = advanced.current[key][b];
-      const r = await api.putBlock(id, block, value, b);
-      if ("code" in r) { setConflicts((c) => ({ ...c, [key]: { mine: value, base: b, theirs: r.current.value, version: r.current.version } })); return; }
-      if (r.version !== b) (advanced.current[key] ||= {})[b] = r.version;
-      setConflicts((c) => { if (!c[key]) return c; const { [key]: _, ...rest } = c; return rest; });
-      setVideos((vs) => vs.map((v) => (v.id === id ? { ...v, script_versions: { ...v.script_versions, [block]: r.version } } : v)));
-    };
+  // Saves of the same block run one at a time, in order
+  const enqueue = (key: string, run: () => Promise<void>) => {
     const p = (queue.current[key] || Promise.resolve()).then(run, run);
     queue.current[key] = p.catch(() => {});
     return p;
   };
+  const put = async (id: string, block: string, value: any, b: number) => {
+    const key = `${id}:${block}`;
+    const r = await api.putBlock(id, block, value, b);
+    if ("code" in r) { setConflict(key, { mine: value, base: b, theirs: r.current.value, version: r.current.version }); return; }
+    if (r.version !== b) (advanced.current[key] ||= {})[b] = r.version;
+    setConflict(key, null);
+    setVideos((vs) => vs.map((v) => (v.id === id ? { ...v, script_versions: { ...v.script_versions, [block]: r.version } } : v)));
+  };
+  // Save one block with the version it was based on. A save based on a version that our own previous save replaced is
+  // moved forward (our edits build on each other); anything else conflicts.
+  const saveBlock = (id: string, block: string, value: any, base?: number) => {
+    const key = `${id}:${block}`;
+    setLocal(id, block, value);
+    return enqueue(key, async () => {
+      let b = base ?? vref.current.find((v) => v.id === id)?.script_versions?.[block] ?? 0;
+      while (advanced.current[key]?.[b] != null) b = advanced.current[key][b];
+      await put(id, block, value, b);
+    });
+  };
+  // Runs after any pending save of the block (e.g. the blur save of the owner's latest text), using the conflict as it is then
   const resolve = (id: string, block: string, how: "mine" | "theirs") => {
-    const key = `${id}:${block}`, c = conflicts[key];
-    if (!c) return;
-    if (how === "mine") return saveBlock(id, block, c.mine, c.version);
-    setConflicts(({ [key]: _, ...rest }) => rest);
-    setLocal(id, block, c.theirs, c.version);
+    const key = `${id}:${block}`;
+    return enqueue(key, async () => {
+      const c = cref.current[key];
+      if (!c) return;
+      if (how === "mine") { setLocal(id, block, c.mine); await put(id, block, c.mine, c.version); return; }
+      setConflict(key, null);
+      setLocal(id, block, c.theirs, c.version);
+    });
   };
   const patch = async (id: string, p: Partial<Video>) => {
     const { script, ...rest } = p;

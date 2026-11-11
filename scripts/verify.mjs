@@ -94,6 +94,15 @@ await check("api: previous value of a changed block is retrievable", async () =>
   assert(g.status === 200 && g.body.value === "second draft" && g.body.version === 2 && g.body.previous?.value === "first draft" && g.body.previous?.version === 1, JSON.stringify(g.body));
   const other = await api(`/api/videos/${verId}/script/conclusao`); assert(other.body.version === 0 && other.body.previous === null, "untouched block should be version 0");
 });
+await check("api: concurrent writes to one block each get their own version", async () => {
+  const rs = await Promise.all(Array.from({ length: 12 }, (_, i) => put(verId, "insercao", { value: `draft ${i}` })));
+  assert(rs.every((r) => r.status === 200), rs.map((r) => r.status).join(","));
+  const versions = rs.map((r) => r.body.version);
+  assert(new Set(versions).size === 12, `duplicate versions returned: ${versions.join(",")}`);
+  const g = await api(`/api/videos/${verId}/script/insercao`);
+  const winner = rs.find((r) => r.body.version === g.body.version);
+  assert(winner && winner.body.value === g.body.value, "returned version does not match the stored value");
+});
 await check("api: unknown or wrong-format block names are rejected", async () => {
   for (const b of ["intro", "gancho"]) { const r = await put(verId, b, { value: "x" }); assert(r.status === 400, `${b}: ${r.status}`); } // gancho is vertical-only
   const r = await api(`/api/videos/${verId}`, { method: "PATCH", body: JSON.stringify({ script: { "hook ": "x" } }) }); assert(r.status === 400, `PATCH "hook ": ${r.status}`);
@@ -178,10 +187,14 @@ await check("ui: conflict shows the newer text and keeps what the owner typed", 
   assert(/Plus my extra line\./.test(await ed.innerText()), "owner's text was discarded");
   const g = await api(`/api/videos/${verId}/script/conclusao`); assert(g.body.value === "Agent rewrote the ending.", "owner's save silently overwrote the agent's");
   await ed.scrollIntoViewIfNeeded(); await page.screenshot({ path: `${OUT}/script-conflict.png`, fullPage: true });
+  // the owner keeps typing after the conflict shows up, then clicks Keep mine right away (no autosave yet): the latest text wins
+  await ed.click(); await page.keyboard.press("End"); await page.keyboard.type(" Revised after the conflict.");
   await note.getByRole("button", { name: /Keep mine|Manter/ }).click();
   await note.waitFor({ state: "detached", timeout: 5000 });
+  await page.waitForTimeout(500);
   const k = await api(`/api/videos/${verId}/script/conclusao`);
-  assert(/Plus my extra line\./.test(k.body.value) && k.body.previous?.value === "Agent rewrote the ending.", JSON.stringify(k.body));
+  assert(/Plus my extra line\. Revised after the conflict\./.test(k.body.value) && k.body.previous?.value === "Agent rewrote the ending.", JSON.stringify(k.body));
+  assert(/Revised after the conflict\./.test(await ed.innerText()), "editor reverted to an older draft");
 });
 await check("ui: full-screen video page", async () => {
   await page.goto(`${BASE}/kanban#/video/${firstId}`, { waitUntil: "networkidle" });

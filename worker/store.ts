@@ -180,11 +180,13 @@ export class Store {
         WHERE video_id = ?3 AND block = ?4 AND (?5 IS NULL OR version = ?5)`).bind(this.actor, path, id, block, base),
       this.db.prepare("UPDATE videos SET script = json_set(script, ?, json(?)), updated_at = datetime('now') WHERE id = ? AND changes() > 0")
         .bind(path, JSON.stringify(value ?? null), id),
+      // read inside the same transaction: the version this write produced, not a later writer's
+      this.db.prepare("SELECT version FROM script_blocks WHERE video_id = ? AND block = ?").bind(id, block),
     ]);
     if (!res[1].meta.changes) return this.conflict((await this.get(id))!, block);
+    const version = (res[3].results[0] as { version: number }).version;
     await this.log(id, `Editou ${block}`, { script: { [block]: cur.script[block] ?? null } });
-    const now = await this.db.prepare("SELECT version FROM script_blocks WHERE video_id = ? AND block = ?").bind(id, block).first<{ version: number }>();
-    return { block, value: value ?? null, version: now!.version };
+    return { block, value: value ?? null, version };
   }
 
   private async updateFields(cur: Video, patch: Partial<Video>) {
