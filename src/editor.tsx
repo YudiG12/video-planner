@@ -130,7 +130,7 @@ export function Field({ value, version, onSave, placeholder, style, vb, remote }
       handleDrop: (_v, e) => { const fs = Array.from((e as DragEvent).dataTransfer?.files || []).filter((f) => f.type.startsWith("image/")); if (!fs.length) return false; addImages(fs); return true; },
     },
     // no autosave while a newer value is waiting: the owner decides (apply, or keep typing and save on blur -> conflict note)
-    onUpdate: ({ editor }) => { window.clearTimeout(timer.current); if (!inc.current) timer.current = window.setTimeout(() => save(editor), 1200); },
+    onUpdate: ({ editor }) => { window.clearTimeout(timer.current); if (!inc.current) timer.current = window.setTimeout(() => { if (!inc.current) save(editor); }, 1200); },
     onBlur: ({ editor }) => {
       window.clearTimeout(timer.current);
       const x = inc.current;
@@ -146,7 +146,7 @@ export function Field({ value, version, onSave, placeholder, style, vb, remote }
   useEffect(() => {
     if (!ed) return;
     if ((value || "") === last.current) { base.current = version; if (inc.current) setIncoming(null); return; }
-    if (ed.isFocused) { setIncoming({ value: value || "", version }); return; }
+    if (ed.isFocused) { window.clearTimeout(timer.current); setIncoming({ value: value || "", version }); return; } // cancel the pending autosave too
     last.current = value || ""; base.current = version; setIncoming(null); ed.commands.setContent(value || "", false);
   }, [value, version, ed]);
   if (!ed) return null;

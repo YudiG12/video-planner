@@ -296,6 +296,9 @@ await check("live: owner typing in the same block keeps their text; \"Claude cha
   const agentText = "Agent wrote a new ending while you typed.";
   mcpOut(await agentMcp("update_script_block", { id: liveId, block: "conclusao", value: agentText }));
   const note = blk.locator(".incoming"); await note.waitFor({ timeout: 2000 });
+  await page.waitForTimeout(1500); // past the 1.2s autosave of the owner's last keystroke: it must not fire while the note waits
+  assert(await note.count() === 1 && await page.locator('.conflict[data-block="conclusao"]').count() === 0, "autosave replaced the note with a conflict");
+  const mid = await api(`/api/videos/${liveId}/script/conclusao`); assert(mid.body.value === agentText, `owner's draft was autosaved: ${JSON.stringify(mid.body.value)}`);
   assert(/Claude changed this block/.test(await note.innerText()) && /view/.test(await note.innerText()) && /apply/.test(await note.innerText()), await note.innerText());
   assert(/Owner draft in progress\./.test(await ed.innerText()), "owner's text was replaced");
   assert(await page.locator('.change[data-block="conclusao"]').count() === 0, "diff box shown while typing");
