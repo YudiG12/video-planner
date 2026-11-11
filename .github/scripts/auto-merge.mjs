@@ -39,11 +39,23 @@ for (const c of await all(`/issues/${PR}/comments`)) {
   verdicts.push({ sha, at: c.created_at, pass: PASS.test(c.body), fail: FAIL.test(c.body) });
 }
 const latest = verdicts.filter((v) => head.startsWith(v.sha)).sort((a, b) => a.at.localeCompare(b.at)).at(-1);
+// Circuit breaker: stop when the agent goes in circles, not when it makes progress.
+// Trips if the same Codex finding (same file + title) comes back on a later commit, or after MAX_ROUNDS failed commits.
+const MAX_ROUNDS = 5;
 const failedShas = new Set(verdicts.filter((v) => v.fail).map((v) => v.sha.slice(0, 7)));
-
-if (failedShas.size >= 2 && !latest?.pass) {
+const findingTitle = (body) => ((/\*\*\s*(.+?)\*\*/.exec((body || "").replace(/<[^>]+>|!\[[^\]]*\]\([^)]*\)/g, "")) || [])[1] || "").trim().toLowerCase();
+const seen = new Map(); let repeated;
+for (const c of await all(`/pulls/${PR}/comments`)) {
+  if (c.user?.login !== CODEX || c.in_reply_to_id) continue;
+  const key = `${c.path} | ${findingTitle(c.body)}`, sha = (c.original_commit_id || c.commit_id || "").slice(0, 7);
+  if (!seen.has(key)) seen.set(key, new Set());
+  seen.get(key).add(sha);
+  if (seen.get(key).size >= 2) repeated = key;
+}
+if ((repeated || failedShas.size >= MAX_ROUNDS) && !latest?.pass) {
   await label("circuit-breaker");
-  await comment(`🛑 **Circuit breaker:** Codex failed this PR on ${failedShas.size} commits. Stopping here — @YudiG12 please take a look.`);
+  const why = repeated ? `the same finding came back after a fix (\`${repeated}\`)` : `Codex failed ${failedShas.size} commits in a row`;
+  await comment(`🛑 **Circuit breaker:** ${why}. Stopping here — @YudiG12 please take a look.`);
   stop("circuit breaker");
 }
 
