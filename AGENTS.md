@@ -8,7 +8,7 @@
 
 # Verify a change (builder and verifier)
 
-`npm ci && npx playwright install chromium && npm run verify`
+Node 22+ (`.nvmrc`). `npm ci && npx playwright install chromium && npm run verify`
 
 Builds the app, runs it on a throwaway local D1 with fake demo data (never production), checks the API + MCP, and saves screenshots of every view to `verify-out/` plus `verify-out/report.json` (`verdict: PASS|FAIL`). `npm run verify -- --keep` leaves the server up to explore by hand.
 
@@ -33,8 +33,8 @@ Builds the app, runs it on a throwaway local D1 with fake demo data (never produ
 
 # Pipeline (issue → PR → verify → merge → deploy)
 
-1. Work is queued as GitHub issues labeled `agente`, each with "Done when…". One open PR per repo at a time.
-2. Builder (Claude, cloud) takes the oldest `agente` issue, works on a branch, runs `npm run verify`, opens a PR with the template (Summary, Decisions, Attention) and `Closes #N`.
+1. Work is queued as GitHub issues labeled `agent`, each with "Done when…". One open PR per repo at a time.
+2. Builder (Claude, cloud) takes the oldest `agent` issue, works on a branch, runs `npm run verify`, opens a PR with the template (Summary, Decisions, Attention) and `Closes #N`.
 3. CI posts the proof comment (verdict, GIF, screenshots). Codex reviews/verifies.
-4. `auto-merge.yml` merges when Codex passes and CI is green, then deploys. It **does not merge** (label `precisa-yudi`) when the PR touches `wrangler*.jsonc`, `worker/agent.ts`, `SECURITY.md`, `.github/` or auth code (Access, tokens, CORS, `workers_dev`, `DEV_OPEN`). After 2 Codex failures it labels `disjuntor` and stops.
+4. `auto-merge.yml` merges when Codex passes and CI is green, then deploys. It **does not merge** (label `needs-owner`) when the PR touches `wrangler*.jsonc`, `worker/agent.ts`, `SECURITY.md`, `.github/` or auth code (Access, tokens, CORS, `workers_dev`, `DEV_OPEN`). After 2 Codex failures it labels `circuit-breaker` and stops.
 5. Migrations merge automatically; put the D1 Time Travel bookmark in the PR's "Attention".

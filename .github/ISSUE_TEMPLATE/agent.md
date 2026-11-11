@@ -1,7 +1,7 @@
 ---
 name: Task for the agent
 about: Queue work for Claude (builds) + Codex (verifies)
-labels: agente
+labels: agent
 ---
 ## What
 

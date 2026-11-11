@@ -79,7 +79,11 @@ await check("mcp: list_videos", async () => { const r = await mcp("list_videos",
 // ---- Screenshots of every view ----
 const { chromium } = await import("playwright");
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+// Offline-safe: external requests (e.g. Google Fonts) get an empty reply, so sandboxes without internet behave the same
+const offline = async (ctx) => ctx.route((url) => !url.href.startsWith(BASE), (r) => r.fulfill({ status: 200, body: "" }));
+const pctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+await offline(pctx);
+const page = await pctx.newPage();
 const errors = []; page.on("pageerror", (e) => errors.push(e.message)); page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
 for (const v of ["kanban", "calendario", "derivados", "ideias"]) {
   await check(`ui: ${v} renders`, async () => {
@@ -120,6 +124,7 @@ await check("ui: no console errors", async () => assert(errors.length === 0, err
 // ---- GIF of the main flow (needs ffmpeg; skipped if missing) ----
 await check("ui: record main flow", async () => {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, recordVideo: { dir: `${OUT}/video`, size: { width: 1280, height: 800 } } });
+  await offline(ctx);
   const p = await ctx.newPage();
   await p.goto(`${BASE}/kanban`, { waitUntil: "networkidle" }); await p.waitForTimeout(800);
   await p.locator(".card", { hasText: "How a database index actually works" }).first().click(); await p.waitForTimeout(1200);

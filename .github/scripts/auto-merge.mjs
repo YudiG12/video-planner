@@ -20,7 +20,7 @@ if (!PR) stop("no PR");
 const pr = await api(`/pulls/${PR}`);
 if (pr.state !== "open" || pr.draft) stop(`PR ${PR}: ${pr.state}${pr.draft ? " draft" : ""}`);
 const labels = pr.labels.map((l) => l.name);
-if (labels.includes("precisa-yudi") || labels.includes("disjuntor")) stop("waiting for owner");
+if (labels.includes("needs-owner") || labels.includes("circuit-breaker")) stop("waiting for owner");
 const head = pr.head.sha;
 
 // Verdicts: one per Codex review/comment, each tied to the commit it names
@@ -42,7 +42,7 @@ const latest = verdicts.filter((v) => head.startsWith(v.sha)).sort((a, b) => a.a
 const failedShas = new Set(verdicts.filter((v) => v.fail).map((v) => v.sha.slice(0, 7)));
 
 if (failedShas.size >= 2 && !latest?.pass) {
-  await label("disjuntor");
+  await label("circuit-breaker");
   await comment(`🛑 **Circuit breaker:** Codex failed this PR on ${failedShas.size} commits. Stopping here — @YudiG12 please take a look.`);
   stop("circuit breaker");
 }
@@ -52,7 +52,7 @@ const files = await all(`/pulls/${PR}/files`);
 const hits = files.filter((f) => SENSITIVE_PATH.test(f.filename) || (f.patch || "").split("\n").some((l) => /^[+-]/.test(l) && SENSITIVE_CODE.test(l))).map((f) => f.filename);
 const uninspectable = files.length >= 3000 || files.some((f) => !f.patch && f.status !== "removed" && /\.(ts|tsx|js|mjs|jsonc?)$/.test(f.filename));
 if (hits.length || uninspectable) {
-  await label("precisa-yudi");
+  await label("needs-owner");
   await comment(`✋ **Waiting for @YudiG12:** this PR touches security-sensitive areas (${hits.join(", ") || "diff too large to inspect"}). Not merging automatically.`);
   stop("sensitive");
 }
