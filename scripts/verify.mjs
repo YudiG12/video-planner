@@ -78,9 +78,17 @@ for (const v of ["kanban", "calendario", "derivados", "ideias"]) {
     assert((await page.locator("body").innerText()).trim().length > 0, "empty page");
   });
 }
-if (firstId) await check("ui: video panel opens", async () => {
-  await page.goto(`${BASE}/kanban#${firstId}`, { waitUntil: "networkidle" });
-  await page.screenshot({ path: `${OUT}/video-${firstId}.png`, fullPage: true });
+await check("ui: video panel opens (click card)", async () => {
+  await page.goto(`${BASE}/kanban`, { waitUntil: "networkidle" });
+  await page.locator(".card", { hasText: "How a database index actually works" }).first().click();
+  await page.locator(".serie-box").waitFor({ timeout: 5000 }); // long-form hook shows the series-line box
+  assert(await page.locator("h3", { hasText: /Conte|Content/ }).count() > 0, "script blocks not visible");
+  await page.screenshot({ path: `${OUT}/video-panel.png` });
+});
+await check("ui: full-screen video page", async () => {
+  await page.goto(`${BASE}/kanban#/video/${firstId}`, { waitUntil: "networkidle" });
+  await page.locator(".full-top").waitFor({ timeout: 5000 });
+  await page.screenshot({ path: `${OUT}/video-full.png`, fullPage: true });
 });
 await check("ui: no console errors", async () => assert(errors.length === 0, errors.slice(0, 3).join(" | ")));
 await browser.close();
