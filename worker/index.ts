@@ -108,6 +108,10 @@ app.get("/api/assets/:id", async (c) => {
     "cache-control": "private, max-age=31536000, immutable",
   } });
 });
+app.patch("/api/series/:id", async (c) => {
+  const r = await c.var.store.updateSeries(c.req.param("id"), await c.req.json().catch(() => null));
+  return "error" in r ? c.json({ error: r.error }, r.status as 400 | 404) : c.json(r);
+});
 app.get("/api/series/:id/next-episode", async (c) => c.json({ episode: await c.var.store.nextEpisode(c.req.param("id")) }));
 
 export default app;

@@ -64,6 +64,16 @@ await check("mcp: tools/list", async () => {
   const r = await api("/mcp", { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) });
   assert(r.body?.result?.tools?.length > 0, JSON.stringify(r.body).slice(0, 200));
 });
+await check("api: update series rejects bad input", async () => {
+  const bad = await api("/api/series/tutorial", { method: "PATCH", body: JSON.stringify({ color: "red" }) }); assert(bad.status === 400, `bad color ${bad.status}`);
+  const ext = await api("/api/series/tutorial", { method: "PATCH", body: JSON.stringify({ logo: "https://evil.example/x.png" }) }); assert(ext.status === 400, `external logo ${ext.status}`);
+  const extra = await api("/api/series/tutorial", { method: "PATCH", body: JSON.stringify({ name: "x" }) }); assert(extra.status === 400, `unknown field ${extra.status}`);
+  const nf = await api("/api/series/nope", { method: "PATCH", body: JSON.stringify({ description: "x" }) }); assert(nf.status === 404, `missing series ${nf.status}`);
+});
+await check("api: update series description + colors", async () => {
+  const r = await api("/api/series/vlog", { method: "PATCH", body: JSON.stringify({ description: "Behind the scenes (verify)", color: "#7A4E0C", bg: "#F6ECD9" }) });
+  assert(r.status === 200 && r.body.description === "Behind the scenes (verify)" && r.body.bg === "#F6ECD9" && r.body.name === "Vlog", `${r.status} ${JSON.stringify(r.body)}`);
+});
 await check("mcp: list_videos", async () => { const r = await mcp("list_videos", {}); assert(r.body?.result && !r.body.result.isError, JSON.stringify(r.body).slice(0, 200)); });
 
 // ---- Screenshots of every view ----
@@ -78,6 +88,22 @@ for (const v of ["kanban", "calendario", "derivados", "ideias"]) {
     assert((await page.locator("body").innerText()).trim().length > 0, "empty page");
   });
 }
+await check("mcp: update_series sets a logo that shows in the Ideas column", async () => {
+  // render a small visible logo, upload it via MCP, attach it to the "tutorial" series via MCP
+  const lp = await browser.newPage({ viewport: { width: 240, height: 80 } });
+  await lp.setContent(`<div style="width:240px;height:80px;display:grid;place-items:center;background:#0E7C86;color:#fff;font:700 28px sans-serif">TUTORIAL</div>`);
+  const data = "data:image/png;base64," + (await lp.screenshot()).toString("base64"); await lp.close();
+  const up = await mcp("upload_image", { data }); assert(!up.body?.result?.isError, JSON.stringify(up.body).slice(0, 200));
+  const { url } = JSON.parse(up.body.result.content[0].text);
+  const r = await mcp("update_series", { id: "tutorial", logo: url }); assert(!r.body?.result?.isError, JSON.stringify(r.body).slice(0, 200));
+  assert(JSON.parse(r.body.result.content[0].text).logo === url, "logo not saved");
+  const bad = await mcp("update_series", { id: "tutorial", color: "nope" }); assert(bad.body?.result?.isError, "bad color accepted via MCP");
+  await page.goto(`${BASE}/ideias`, { waitUntil: "networkidle" });
+  const img = page.locator(`.serie-cover img[src="${url}"]`);
+  await img.waitFor({ timeout: 5000 });
+  assert(await img.evaluate((el) => el.complete && el.naturalWidth > 0), "logo image did not load");
+  await page.screenshot({ path: `${OUT}/ideias-series-logo.png`, fullPage: true });
+});
 await check("ui: video panel opens (click card)", async () => {
   await page.goto(`${BASE}/kanban`, { waitUntil: "networkidle" });
   await page.locator(".card", { hasText: "How a database index actually works" }).first().click();

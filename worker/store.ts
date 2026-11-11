@@ -22,6 +22,21 @@ type Row = Omit<Video, "script" | "derivatives"> & { script: string; derivatives
 const parse = (r: Row): Video => ({ ...r, script: JSON.parse(r.script || "{}"), derivatives: JSON.parse(r.derivatives || "{}") });
 const newId = () => crypto.randomUUID().slice(0, 8);
 
+export const SERIES_FIELDS = ["logo", "color", "bg", "description"] as const;
+export type SeriesPatch = Partial<Record<(typeof SERIES_FIELDS)[number], string | null>>;
+const HEX = /^#[0-9a-fA-F]{6}$/;
+const ASSET_URL = /^\/api\/assets\/[0-9a-f]{16}$/;
+export function validateSeriesPatch(p: unknown): string | null {
+  if (!p || typeof p !== "object" || Array.isArray(p)) return "body must be an object";
+  const o = p as Record<string, unknown>;
+  const unknown = Object.keys(o).filter((k) => !(SERIES_FIELDS as readonly string[]).includes(k));
+  if (unknown.length) return `unknown field(s): ${unknown.join(", ")} (allowed: ${SERIES_FIELDS.join(", ")})`;
+  for (const k of ["color", "bg"] as const) if (k in o && !(typeof o[k] === "string" && HEX.test(o[k] as string))) return `${k} must be a #RRGGBB hex color`;
+  if ("logo" in o && o.logo !== null && !(typeof o.logo === "string" && ASSET_URL.test(o.logo))) return "logo must be an asset URL from upload_image (/api/assets/<id>) or null";
+  if ("description" in o && o.description !== null && !(typeof o.description === "string" && o.description.length <= 500)) return "description must be a string (max 500 chars) or null";
+  return null;
+}
+
 export class Store {
   constructor(private db: D1Database, private actor: string) {}
   get database() { return this.db; }
@@ -117,6 +132,20 @@ export class Store {
   async nextEpisode(seriesId: string) {
     const r = await this.db.prepare("SELECT COALESCE(MAX(episode), 0) AS m FROM videos WHERE series_id = ?").bind(seriesId).first<{ m: number }>();
     return (r?.m ?? 0) + 1;
+  }
+
+  // Series appearance: logo (asset URL from upload_image, or null to clear), color/bg (#hex), description.
+  async updateSeries(id: string, body: unknown): Promise<Record<string, unknown> | { error: string; status: number }> {
+    const cur = await this.db.prepare("SELECT * FROM series WHERE id = ?").bind(id).first();
+    if (!cur) return { error: "series not found", status: 404 };
+    const err = validateSeriesPatch(body);
+    if (err) return { error: err, status: 400 };
+    const patch = body as SeriesPatch;
+    const sets: string[] = [];
+    const args: unknown[] = [];
+    for (const k of SERIES_FIELDS) if (k in patch) { sets.push(`${k} = ?`); args.push(patch[k] ?? null); }
+    if (sets.length) await this.db.prepare(`UPDATE series SET ${sets.join(", ")} WHERE id = ?`).bind(...args, id).run();
+    return (await this.db.prepare("SELECT * FROM series WHERE id = ?").bind(id).first())!;
   }
 
   async remove(id: string) {
