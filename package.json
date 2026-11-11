@@ -39,5 +39,8 @@
     "vite": "^6.0.7",
     "wrangler": "^4.159.0"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.12"
+  }
 }
