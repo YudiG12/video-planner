@@ -109,7 +109,7 @@ function CardMeta({ data, v, small }: { data: Data; v: Video; small?: boolean })
   return (
     <div className="card-meta">
       <div className="fmt">{v.format === "longo" ? <I.YT w={small ? 15 : 18} /> : <I.IG s={small ? 12 : 14} />}</div>
-      <div className="tagwrap">{s && <span className="tag" style={{ background: s.bg, color: s.color }}>{small ? s.name : tagText(s, v)}</span>}</div>
+      <div className="tagwrap">{s?.logo ? <span className="tag-logo" title={s.name}><img src={s.logo} alt={s.name} /></span> : s && <span className="tag" style={{ background: s.bg, color: s.color }}>{small ? s.name : tagText(s, v)}</span>}</div>
       {!small && v.publish_date && <span className="mono" style={{ fontSize: 11, color: "var(--muted)", flexShrink: 0, marginLeft: "auto" }}>{new Date(v.publish_date + "T12:00").toLocaleDateString(dateLocale(), { day: "numeric", month: "short" }).replace(".", "")}</span>}
       {sp?.logo && <img className="logo" src={sp.logo} alt={sp.name} title={sp.name} />}
     </div>
@@ -302,7 +302,7 @@ function Meta({ data, v, big }: { data: Data; v: Video; big?: boolean }) {
     <div className="meta">
       {s ? (
         <div className="serie" style={{ background: s.bg, color: s.color }}>
-          <div className="logo-ph" />
+          {s.logo ? <img className="serie-logo" src={s.logo} alt="" /> : <div className="logo-ph" />}
           {v.episode && s.format === "vertical" && <span className="ep">EP {v.episode}</span>}
           <b>{s.name}</b>
           {v.format === "longo" ? <I.YT w={17} /> : <I.IG s={15} />}
@@ -363,6 +363,11 @@ function Script({ data, v }: { data: Data; v: Video }) {
             <Field value={hook[k]} onSave={(x) => set("hook", { ...hook, [k]: x })} />
           </div>
         ))}
+        {(() => { const se = seriesOf(data.boot, v); return se || hook.serie ? (
+          <div className="serie-box" style={{ borderColor: se?.color, background: se?.bg }}>
+            <label className="eyebrow" style={{ color: se?.color }}>{se?.logo && <img src={se.logo} alt="" />}{t("Fala da série")}</label>
+            <Field value={hook.serie} onSave={(x) => set("hook", { ...hook, serie: x })} />
+          </div>) : null; })()}
       </div>
       <Content sc={sc} sp={sp} set={set} />
       <div className="block"><h3>{t("3 · Conclusão")}</h3><Field value={sc.conclusao} onSave={(x) => set("conclusao", x)} /></div>
@@ -602,7 +607,7 @@ function Calendar({ data, videos, open }: { data: Data; videos: Video[]; open: (
 // ---------- ideas ----------
 function Ideias({ data, filter, open }: { data: Data; filter: Filter; open: (id: string) => void }) {
   if (!data.boot) return null;
-  const series = data.boot.series.filter((s) => filter === "todos" || s.format === filter);
+  const series = data.boot.series.filter((s) => filter === "todos" || s.format === filter).sort((a, b) => (a.format === "longo" ? 0 : 1) - (b.format === "longo" ? 0 : 1) || a.position - b.position);
   const add = async (s: Series) => { const v = await api.create({ title: "Nova ideia", format: s.format, series_id: s.id }); await data.reload(); open(v.id); };
   return (
     <div className="ideias">
@@ -611,8 +616,12 @@ function Ideias({ data, filter, open }: { data: Data; filter: Filter; open: (id:
         return (
           <div className="serie-col" key={s.id} style={{ background: s.bg, borderColor: s.bg }}>
             <div className="serie-h">
-              <div className="top">{s.format === "longo" ? <I.YT /> : <I.IG />}<b style={{ color: s.color }}>{s.name}</b><span style={{ color: s.color }}>{items.length}</span></div>
-              <p>{s.description}</p>
+              {s.logo ? (
+                <div className="serie-cover"><img src={s.logo} alt={s.name} title={s.description ?? s.name} /><span style={{ color: s.color }}>{items.length}</span></div>
+              ) : (<>
+                <div className="top">{s.format === "longo" ? <I.YT /> : <I.IG />}<b style={{ color: s.color }}>{s.name}</b><span style={{ color: s.color }}>{items.length}</span></div>
+                <p>{s.description}</p>
+              </>)}
             </div>
             <div className="serie-cards">
               {items.map((v) => <Card key={v.id} data={data} v={v} sel={false} onClick={() => open(v.id)} />)}

@@ -5,3 +5,5 @@ dist
 .agent-token
 backups/
 *.local.jsonc
+.verify
+verify-out

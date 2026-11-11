@@ -1,5 +1,5 @@
 // Minimal MCP (Streamable HTTP, JSON responses) on top of the same Store as the REST API.
-import { Store, STATUSES } from "./store";
+import { Store, STATUSES, saveAsset } from "./store";
 
 const str = (description: string) => ({ type: "string", description });
 const TOOLS = [
@@ -11,8 +11,10 @@ const TOOLS = [
   { name: "update_video", description: "Update a video's fields (title, series, episode, sponsor, publish date, derivatives).",
     inputSchema: { type: "object", properties: { id: str("id"), title: { type: "string" }, series_id: { type: "string" }, episode: { type: "number" }, sponsor_id: { type: "string" }, publish_date: { type: "string" }, derivatives: { type: "object" } }, required: ["id"] } },
   { name: "move_video", description: "Move the video to another kanban status (optionally at a position).", inputSchema: { type: "object", properties: { id: str("id"), status: str(STATUSES.join(", ")), position: { type: "number" } }, required: ["id", "status"] } },
-  { name: "update_script_block", description: "Edit ONE script block without touching the others. Text is markdown. Long: pairs, thumb_desc, hook {confirmacao, promessa, curiosidade, pessoalidade}, conteudo (content), insercao (sponsor segment text; place it inside conteudo with a line [INSERÇÃO] where it fits, before ~45% of the video), conclusao. Vertical: capa (cover URL), gancho (hook), conteudo, conclusao.",
+  { name: "update_script_block", description: "Edit ONE script block without touching the others. Text is markdown. Long: pairs, thumb_desc, hook {confirmacao, promessa, curiosidade, pessoalidade, serie (the spoken series line, shown in its own box)}, conteudo (content), insercao (sponsor segment text; place it inside conteudo with a line [INSERÇÃO] where it fits, before ~45% of the video), conclusao. Vertical: capa (cover URL), gancho (hook), conteudo, conclusao.",
     inputSchema: { type: "object", properties: { id: str("id"), block: str("block name"), value: { description: "block content (string or object)" } }, required: ["id", "block", "value"] } },
+  { name: "upload_image", description: "Upload a print/screenshot (data URL: data:image/png|jpeg|webp|gif;base64,..., max 1.5 MB). Returns { url }. Embed it in a script block as markdown ![print](url) right under the line where it is mentioned.",
+    inputSchema: { type: "object", properties: { data: str("data URL of the image") }, required: ["data"] } },
   { name: "list_series", description: "List series, sponsors and valid statuses.", inputSchema: { type: "object", properties: {} } },
   { name: "next_episode", description: "Next episode number for a series.", inputSchema: { type: "object", properties: { series_id: str("series id") }, required: ["series_id"] } },
 ];
@@ -25,6 +27,7 @@ async function call(store: Store, name: string, a: any) {
     case "update_video": { const { id, ...rest } = a; return store.update(id, rest); }
     case "move_video": return store.move(a.id, a.status, a.position);
     case "update_script_block": return store.update(a.id, { script: { [a.block]: a.value } });
+    case "upload_image": { const r = await saveAsset(store.database, a.data); if ("error" in r) throw new Error(r.error); return r; }
     case "list_series": return store.bootstrap();
     case "next_episode": return { episode: await store.nextEpisode(a.series_id) };
     default: throw new Error(`unknown tool: ${name}`);

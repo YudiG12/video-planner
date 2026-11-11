@@ -24,6 +24,7 @@ const newId = () => crypto.randomUUID().slice(0, 8);
 
 export class Store {
   constructor(private db: D1Database, private actor: string) {}
+  get database() { return this.db; }
 
   async bootstrap() {
     const [series, sponsors] = await Promise.all([
@@ -122,4 +123,16 @@ export class Store {
     await this.db.prepare("DELETE FROM videos WHERE id = ?").bind(id).run();
     return { ok: true };
   }
+}
+
+// Images (prints, logos): data URL of png/jpeg/webp/gif, max 1.5 MB decoded. Shared by REST and MCP.
+export async function saveAsset(db: D1Database, data: unknown): Promise<{ id: string; url: string } | { error: string; status: number }> {
+  if (typeof data !== "string" || data.length > 2_100_000) return { error: "image too large", status: 413 };
+  const m = /^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/=]+)$/.exec(data);
+  if (!m) return { error: "invalid image", status: 400 };
+  const bytes = Uint8Array.from(atob(m[2]), (ch) => ch.charCodeAt(0));
+  if (bytes.length > 1_500_000) return { error: "image too large", status: 413 };
+  const id = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+  await db.prepare("INSERT INTO assets (id, mime, data) VALUES (?, ?, ?)").bind(id, m[1], bytes).run();
+  return { id, url: `/api/assets/${id}` };
 }
