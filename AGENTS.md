@@ -14,7 +14,7 @@ Builds the app, runs it on a throwaway local D1 with fake demo data (never produ
 
 **Verifier (Codex):** you did not write this code. Run `npm run verify`, then check the PR's "Done when…" items yourself against the running app (`--keep`) and the screenshots. Reply on the PR with `VERDICT: PASS` or `VERDICT: FAIL` + what failed, and attach the relevant screenshots. Don't fix the code.
 
-**Builder (Claude):** a PR is ready only when `npm run verify` passes. If you add a feature, add its check to `scripts/verify.mjs` and a line to the map below. Attach screenshots to the PR and write a short decisions log with an "Attention" section.
+**Builder (Claude):** a PR is ready only when `npm run verify` passes. If you add a feature, add its check to `scripts/verify.mjs` and a line to the map below. Fill the PR template (Summary, Decisions, Attention). CI posts the proof comment (verdict, GIF, screenshots) automatically.
 
 ## Feature map
 
