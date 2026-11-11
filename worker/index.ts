@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { Store, saveAsset } from "./store";
+import { Store, saveAsset, isBlockError } from "./store";
 import { handleMcp } from "./mcp";
 
 type Env = {
@@ -74,10 +74,25 @@ app.get("/api/videos/:id", async (c) => {
   const v = await c.var.store.get(c.req.param("id"));
   return v ? c.json(v) : c.json({ error: "not found" }, 404);
 });
-app.post("/api/videos", async (c) => c.json(await c.var.store.create(await c.req.json()), 201));
+app.post("/api/videos", async (c) => {
+  const v = await c.var.store.create(await c.req.json());
+  return isBlockError(v) ? c.json(v, v.status as 400) : c.json(v, 201);
+});
 app.patch("/api/videos/:id", async (c) => {
   const v = await c.var.store.update(c.req.param("id"), await c.req.json());
+  if (isBlockError(v)) return c.json(v, v.status as 400 | 404 | 409);
   return v ? c.json(v) : c.json({ error: "not found" }, 404);
+});
+// One script block: GET -> { value, version, previous: { value, version } }; PUT { value, base_version? } -> { value, version } or 409 conflict
+app.get("/api/videos/:id/script/:block", async (c) => {
+  const r = await c.var.store.getBlock(c.req.param("id"), c.req.param("block"));
+  return isBlockError(r) ? c.json(r, r.status as 400 | 404) : c.json(r);
+});
+app.put("/api/videos/:id/script/:block", async (c) => {
+  const b = await c.req.json<{ value?: unknown; base_version?: number | null }>().catch(() => null);
+  if (!b || typeof b !== "object" || !("value" in b)) return c.json({ error: "body must be { value, base_version? }" }, 400);
+  const r = await c.var.store.setBlock(c.req.param("id"), c.req.param("block"), b.value, b.base_version);
+  return isBlockError(r) ? c.json(r, r.status as 400 | 404 | 409) : c.json(r);
 });
 app.post("/api/videos/:id/move", async (c) => {
   const b = await c.req.json<{ status: string; position?: number }>();

@@ -74,6 +74,47 @@ await check("api: update series description + colors", async () => {
   const r = await api("/api/series/vlog", { method: "PATCH", body: JSON.stringify({ description: "Behind the scenes (verify)", color: "#7A4E0C", bg: "#F6ECD9" }) });
   assert(r.status === 200 && r.body.description === "Behind the scenes (verify)" && r.body.bg === "#F6ECD9" && r.body.name === "Vlog", `${r.status} ${JSON.stringify(r.body)}`);
 });
+// ---- script block versions (#10) ----
+const put = (id, block, body) => api(`/api/videos/${id}/script/${block}`, { method: "PUT", body: JSON.stringify(body) });
+let verId;
+await check("api: same block saved twice with the same base_version -> second is a conflict", async () => {
+  const c = await api("/api/videos", { method: "POST", body: JSON.stringify({ title: "verify versions", format: "longo" }) }); verId = c.body.id;
+  assert(c.body.script_versions && Object.keys(c.body.script_versions).length === 0, "new video should have no block versions");
+  const a = await put(verId, "conteudo", { value: "first draft", base_version: 0 });
+  assert(a.status === 200 && a.body.version === 1, `first save ${a.status} ${JSON.stringify(a.body)}`);
+  const b = await put(verId, "conteudo", { value: "other edit", base_version: 0 });
+  assert(b.status === 409 && b.body.code === "conflict" && b.body.current?.version === 1 && b.body.current?.value === "first draft", `second save ${b.status} ${JSON.stringify(b.body)}`);
+  const g = await api(`/api/videos/${verId}`); assert(g.body.script.conteudo === "first draft" && g.body.script_versions.conteudo === 1, "conflicting write changed the block");
+  const p = await api(`/api/videos/${verId}`, { method: "PATCH", body: JSON.stringify({ script: { conteudo: "x" }, base_versions: { conteudo: 0 } }) });
+  assert(p.status === 409, `PATCH with stale base_versions ${p.status}`);
+});
+await check("api: previous value of a changed block is retrievable", async () => {
+  const a = await put(verId, "conteudo", { value: "second draft", base_version: 1 }); assert(a.status === 200 && a.body.version === 2, `save ${a.status}`);
+  const g = await api(`/api/videos/${verId}/script/conteudo`);
+  assert(g.status === 200 && g.body.value === "second draft" && g.body.version === 2 && g.body.previous?.value === "first draft" && g.body.previous?.version === 1, JSON.stringify(g.body));
+  const other = await api(`/api/videos/${verId}/script/conclusao`); assert(other.body.version === 0 && other.body.previous === null, "untouched block should be version 0");
+});
+await check("api: unknown or wrong-format block names are rejected", async () => {
+  for (const b of ["intro", "gancho"]) { const r = await put(verId, b, { value: "x" }); assert(r.status === 400, `${b}: ${r.status}`); } // gancho is vertical-only
+  const r = await api(`/api/videos/${verId}`, { method: "PATCH", body: JSON.stringify({ script: { "hook ": "x" } }) }); assert(r.status === 400, `PATCH "hook ": ${r.status}`);
+  const h = await put(verId, "hook", { value: "not an object" }); assert(h.status === 400, `hook as string: ${h.status}`);
+});
+await check("mcp: update_script_block rejects unknown block names", async () => {
+  for (const b of ["hook ", "intro"]) { const r = await mcp("update_script_block", { id: verId, block: b, value: "x" }); assert(r.body?.result?.isError, `${JSON.stringify(b)} accepted`); }
+  const g = await api(`/api/videos/${verId}`); assert(!("intro" in g.body.script) && !("hook " in g.body.script), "ghost block created");
+});
+await check("mcp: update_script_block with base_version (ok, then conflict) + get_script_block", async () => {
+  const ok = await mcp("update_script_block", { id: verId, block: "conclusao", value: "agent ending", base_version: 0 });
+  assert(!ok.body?.result?.isError && JSON.parse(ok.body.result.content[0].text).version === 1, JSON.stringify(ok.body).slice(0, 300));
+  const stale = await mcp("update_script_block", { id: verId, block: "conclusao", value: "stale", base_version: 0 });
+  assert(stale.body?.result?.isError, "stale base_version accepted");
+  const err = JSON.parse(stale.body.result.content[0].text); assert(err.code === "conflict" && err.current.value === "agent ending" && err.current.version === 1, stale.body.result.content[0].text);
+  const g = await mcp("get_script_block", { id: verId, block: "conteudo" }); const gb = JSON.parse(g.body.result.content[0].text);
+  assert(gb.previous?.value === "first draft", JSON.stringify(gb));
+  const list = await api("/mcp", { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) });
+  const tool = list.body.result.tools.find((t) => t.name === "update_script_block");
+  assert(tool.inputSchema.properties.base_version && /base_version/.test(tool.description), "update_script_block does not document base_version");
+});
 await check("mcp: list_videos", async () => { const r = await mcp("list_videos", {}); assert(r.body?.result && !r.body.result.isError, JSON.stringify(r.body).slice(0, 200)); });
 
 // ---- Screenshots of every view ----
@@ -115,12 +156,40 @@ await check("ui: video panel opens (click card)", async () => {
   assert(await page.locator("h3", { hasText: /Conte|Content/ }).count() > 0, "script blocks not visible");
   await page.screenshot({ path: `${OUT}/video-panel.png` });
 });
+await check("ui: editing a script block in the app saves it with its version", async () => {
+  await page.goto(`${BASE}/kanban#/video/${verId}`, { waitUntil: "networkidle" });
+  const ed = page.locator(".block", { has: page.locator("h3", { hasText: /Conclus/ }) }).locator(".rt").first();
+  await ed.click(); await page.keyboard.type("Owner wrote this ending.");
+  await page.evaluate(() => document.activeElement?.blur()); // blur saves
+  await page.waitForTimeout(800);
+  const g = await api(`/api/videos/${verId}/script/conclusao`);
+  assert(/Owner wrote this ending\./.test(g.body.value) && g.body.version === 2 && g.body.updated_by === "owner", JSON.stringify(g.body));
+  await page.screenshot({ path: `${OUT}/script-edit.png`, fullPage: true });
+});
+await check("ui: conflict shows the newer text and keeps what the owner typed", async () => {
+  const cur = await api(`/api/videos/${verId}/script/conclusao`);
+  // the agent changes the block while the page is open (no reload)
+  const agent = await put(verId, "conclusao", { value: "Agent rewrote the ending.", base_version: cur.body.version }); assert(agent.status === 200, `agent ${agent.status}`);
+  const ed = page.locator(".block", { has: page.locator("h3", { hasText: /Conclus/ }) }).locator(".rt").first();
+  await ed.click(); await page.keyboard.press("End"); await page.keyboard.type(" Plus my extra line.");
+  await page.evaluate(() => document.activeElement?.blur());
+  const note = page.locator('.conflict[data-block="conclusao"]'); await note.waitFor({ timeout: 5000 });
+  assert(/Agent rewrote the ending\./.test(await note.innerText()), "conflict note does not show the newer text");
+  assert(/Plus my extra line\./.test(await ed.innerText()), "owner's text was discarded");
+  const g = await api(`/api/videos/${verId}/script/conclusao`); assert(g.body.value === "Agent rewrote the ending.", "owner's save silently overwrote the agent's");
+  await ed.scrollIntoViewIfNeeded(); await page.screenshot({ path: `${OUT}/script-conflict.png`, fullPage: true });
+  await note.getByRole("button", { name: /Keep mine|Manter/ }).click();
+  await note.waitFor({ state: "detached", timeout: 5000 });
+  const k = await api(`/api/videos/${verId}/script/conclusao`);
+  assert(/Plus my extra line\./.test(k.body.value) && k.body.previous?.value === "Agent rewrote the ending.", JSON.stringify(k.body));
+});
 await check("ui: full-screen video page", async () => {
   await page.goto(`${BASE}/kanban#/video/${firstId}`, { waitUntil: "networkidle" });
   await page.locator(".full-top").waitFor({ timeout: 5000 });
   await page.screenshot({ path: `${OUT}/video-full.png`, fullPage: true });
 });
-await check("ui: no console errors", async () => assert(errors.length === 0, errors.slice(0, 3).join(" | ")));
+// the conflict check above makes the browser log its expected 409 response; any other error still fails
+await check("ui: no console errors", async () => { const e = errors.filter((m) => !/status of 409 \(Conflict\)/.test(m)); assert(e.length === 0, e.slice(0, 3).join(" | ")); });
 // ---- GIF of the main flow (needs ffmpeg; skipped if missing) ----
 await check("ui: record main flow", async () => {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, recordVideo: { dir: `${OUT}/video`, size: { width: 1280, height: 800 } } });
