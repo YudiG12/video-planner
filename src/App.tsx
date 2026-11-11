@@ -341,9 +341,10 @@ function Content({ sc, sp, set, ver, cf, lc, fp }: { sc: any; sp: any; set: (b: 
   );
   return (
     <div className={"block" + lc("conteudo")}><h3>{t("2 · Conteúdo")}</h3>{cf("conteudo")}
-      <Field key={"b" + at + before.length} value={before} version={ver("conteudo")} {...fp("conteudo")} onSave={(x, b) => set("conteudo", join(x, after), b)} />
+      {/* stable keys: a remount would drop the owner's focus (and draft) when a live change resizes the text; Field follows value changes itself */}
+      <Field key="before" value={before} version={ver("conteudo")} {...fp("conteudo")} onSave={(x, b) => set("conteudo", join(x, after), b)} />
       {ins}
-      {at >= 0 && <Field key={"a" + at} value={after} version={ver("conteudo")} {...fp("conteudo")} onSave={(x, b) => set("conteudo", join(before, x), b)} />}
+      {at >= 0 && <Field key="after" value={after} version={ver("conteudo")} {...fp("conteudo")} onSave={(x, b) => set("conteudo", join(before, x), b)} />}
     </div>
   );
 }

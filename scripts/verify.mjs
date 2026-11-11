@@ -308,6 +308,19 @@ await check("live: owner typing in the same block keeps their text; \"Claude cha
   await page.evaluate(() => document.activeElement?.blur()); await page.waitForTimeout(600);
   const g = await api(`/api/videos/${liveId}/script/conclusao`); assert(g.body.value === agentText, `saved ${JSON.stringify(g.body.value)}`);
 });
+await check("live: owner typing in Content keeps focus and draft when the agent replaces it with a different length", async () => {
+  const blk = page.locator(".block", { has: page.locator("h3", { hasText: /Conte/ }) }).first(), ed = blk.locator(".rt").first();
+  await ed.click(); await page.keyboard.press("End"); await page.keyboard.type(" Owner content draft.");
+  const agentText = "A much longer agent rewrite of the content block, so the text before any marker changes length a lot.";
+  mcpOut(await agentMcp("update_script_block", { id: liveId, block: "conteudo", value: agentText }));
+  const note = blk.locator(".incoming"); await note.waitFor({ timeout: 2000 });
+  assert(await ed.evaluate((el) => el.contains(document.activeElement)), "editor lost focus");
+  assert(/Owner content draft\./.test(await ed.innerText()), "owner's draft was replaced");
+  const g = await api(`/api/videos/${liveId}/script/conteudo`); assert(g.body.value === agentText, `owner's draft was saved: ${JSON.stringify(g.body.value)}`);
+  await note.getByRole("button", { name: "apply" }).click(); await note.waitFor({ state: "detached", timeout: 2000 });
+  assert((await ed.innerText()).trim() === agentText, `editor shows "${await ed.innerText()}"`);
+  await page.evaluate(() => document.activeElement?.blur());
+});
 await check("live: a write through the app Worker (REST) reaches another open tab", async () => {
   const p2 = await pctx.newPage(); await p2.goto(`${BASE}/kanban`, { waitUntil: "networkidle" }); await liveOn(p2);
   const t0 = Date.now();
