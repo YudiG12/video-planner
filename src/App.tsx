@@ -8,18 +8,72 @@ type View = "kanban" | "calendario" | "derivados" | "ideias";
 type Filter = "todos" | Format;
 
 // ---------- simple global state ----------
+export type Conflict = { mine: any; base: number; theirs: any; version: number };
 function useData() {
   const [boot, setBoot] = useState<Boot | null>(null);
   const [videos, setVideos] = useState<Video[]>([]);
+  // script blocks whose save was rejected because someone else changed them first; key `${videoId}:${block}`
+  const [conflicts, setConflictsState] = useState<Record<string, Conflict>>({});
+  // kept in a ref too, so queued saves see the latest conflict (state updates land a render later)
+  const cref = useRef(conflicts);
+  const setConflict = (key: string, c: Conflict | null) => {
+    const { [key]: _, ...rest } = cref.current;
+    cref.current = c ? { ...rest, [key]: c } : rest;
+    setConflictsState(cref.current);
+  };
+  const vref = useRef(videos); vref.current = videos;
+  const queue = useRef<Record<string, Promise<unknown>>>({});
+  const advanced = useRef<Record<string, Record<number, number>>>({}); // own saves: base -> new version
   const reload = () => api.list().then(setVideos);
   useEffect(() => { api.boot().then((b) => { setLocale(b.locale); document.documentElement.lang = b.locale || "en"; setBoot(b); }); reload(); }, []);
+  const setLocal = (id: string, block: string, value: any, version?: number) => setVideos((vs) => vs.map((v) => (v.id === id
+    ? { ...v, script: { ...v.script, [block]: value }, script_versions: version == null ? v.script_versions : { ...v.script_versions, [block]: version } } : v)));
+  // Saves of the same block run one at a time, in order
+  const enqueue = (key: string, run: () => Promise<void>) => {
+    const p = (queue.current[key] || Promise.resolve()).then(run, run);
+    queue.current[key] = p.catch(() => {});
+    return p;
+  };
+  const put = async (id: string, block: string, value: any, b: number) => {
+    const key = `${id}:${block}`;
+    const r = await api.putBlock(id, block, value, b);
+    if ("code" in r) { setConflict(key, { mine: value, base: b, theirs: r.current.value, version: r.current.version }); return; }
+    if (r.version !== b) (advanced.current[key] ||= {})[b] = r.version;
+    setConflict(key, null);
+    setVideos((vs) => vs.map((v) => (v.id === id ? { ...v, script_versions: { ...v.script_versions, [block]: r.version } } : v)));
+  };
+  // Save one block with the version it was based on. A save based on a version that our own previous save replaced is
+  // moved forward (our edits build on each other); anything else conflicts.
+  const saveBlock = (id: string, block: string, value: any, base?: number) => {
+    const key = `${id}:${block}`;
+    setLocal(id, block, value);
+    return enqueue(key, async () => {
+      let b = base ?? vref.current.find((v) => v.id === id)?.script_versions?.[block] ?? 0;
+      while (advanced.current[key]?.[b] != null) b = advanced.current[key][b];
+      await put(id, block, value, b);
+    });
+  };
+  // Runs after any pending save of the block (e.g. the blur save of the owner's latest text), using the conflict as it is then
+  const resolve = (id: string, block: string, how: "mine" | "theirs") => {
+    const key = `${id}:${block}`;
+    return enqueue(key, async () => {
+      const c = cref.current[key];
+      if (!c) return;
+      if (how === "mine") { setLocal(id, block, c.mine); await put(id, block, c.mine, c.version); return; }
+      setConflict(key, null);
+      setLocal(id, block, c.theirs, c.version);
+    });
+  };
   const patch = async (id: string, p: Partial<Video>) => {
-    setVideos((vs) => vs.map((v) => (v.id === id ? { ...v, ...p, script: { ...v.script, ...(p.script || {}) } } : v)));
-    const nv = await api.update(id, p);
-    setVideos((vs) => vs.map((v) => (v.id === id ? nv : v)));
+    const { script, ...rest } = p;
+    for (const [block, value] of Object.entries(script || {})) saveBlock(id, block, value);
+    if (!Object.keys(rest).length) return;
+    setVideos((vs) => vs.map((v) => (v.id === id ? { ...v, ...rest } : v)));
+    const nv = await api.update(id, rest);
+    setVideos((vs) => vs.map((v) => (v.id === id ? { ...nv, script: v.script, script_versions: v.script_versions } : v)));
     return nv;
   };
-  return { boot, videos, setVideos, reload, patch };
+  return { boot, videos, setVideos, reload, patch, saveBlock, conflicts, resolve };
 }
 type Data = ReturnType<typeof useData>;
 
@@ -145,7 +199,7 @@ function Options({ data, v, after }: { data: Data; v: Video; after: () => void }
 // Without the marker it shows right after the content. ↑/↓ move it one section at a time.
 const MARK = "[INSERÇÃO]";
 const isSection = (l: string) => /^(\*\*\d+\.|#{1,3} )/.test(l.trim());
-function Content({ sc, sp, set }: { sc: any; sp: any; set: (b: string, v: any) => void }) {
+function Content({ sc, sp, set, ver, cf }: { sc: any; sp: any; set: (b: string, v: any, base?: number) => void; ver: (b: string) => number; cf: (b: string) => React.ReactNode }) {
   const text: string = sc.conteudo || "";
   const lines = text.split("\n");
   const at = lines.findIndex((l) => l.replace(/\\/g, "").trim() === MARK);
@@ -169,15 +223,16 @@ function Content({ sc, sp, set }: { sc: any; sp: any; set: (b: string, v: any) =
           <button className="ins-mv" title={t("Subir")} onClick={() => move(-1)}>↑</button>
           <button className="ins-mv" title={t("Descer")} onClick={() => move(1)}>↓</button>
         </div>
-        <Field value={sc.insercao} onSave={(x) => set("insercao", x)} placeholder={t("Onde entra e o que falar…")} />
+        {cf("insercao")}
+        <Field value={sc.insercao} version={ver("insercao")} onSave={(x, b) => set("insercao", x, b)} placeholder={t("Onde entra e o que falar…")} />
       </div>
     </div>
   );
   return (
-    <div className="block"><h3>{t("2 · Conteúdo")}</h3>
-      <Field key={"b" + at + before.length} value={before} onSave={(x) => set("conteudo", join(x, after))} />
+    <div className="block"><h3>{t("2 · Conteúdo")}</h3>{cf("conteudo")}
+      <Field key={"b" + at + before.length} value={before} version={ver("conteudo")} onSave={(x, b) => set("conteudo", join(x, after), b)} />
       {ins}
-      {at >= 0 && <Field key={"a" + at} value={after} onSave={(x) => set("conteudo", join(before, x))} />}
+      {at >= 0 && <Field key={"a" + at} value={after} version={ver("conteudo")} onSave={(x, b) => set("conteudo", join(before, x), b)} />}
     </div>
   );
 }
@@ -323,11 +378,42 @@ function TitleInput({ data, v }: { data: Data; v: Video }) {
 // textarea that saves on blur
 
 // ---------- script ----------
-function Script({ data, v }: { data: Data; v: Video }) {
-  const set = (block: string, value: any) => data.patch(v.id, { script: { [block]: value } });
+// While a block is in conflict, the editor keeps showing the owner's text and the version it was based on
+function withConflicts(data: Data, v: Video): Video {
+  const mine = Object.entries(data.conflicts).filter(([k]) => k.startsWith(v.id + ":"));
+  if (!mine.length) return v;
+  const script = { ...v.script }, script_versions = { ...v.script_versions };
+  for (const [k, c] of mine) { const b = k.slice(v.id.length + 1); script[b] = c.mine; script_versions[b] = c.base; }
+  return { ...v, script, script_versions };
+}
+const blockText = (x: any): string => x == null ? "" : typeof x === "string" ? x
+  : Array.isArray(x) ? x.map((p, i) => `${i + 1}. ${p?.title || ""}${p?.thumb_note ? " · " + p.thumb_note : ""}`).join("\n")
+  : Object.entries(x).filter(([, y]) => y).map(([k, y]) => `${k}: ${typeof y === "string" ? y : JSON.stringify(y)}`).join("\n");
+
+function ConflictNote({ data, v, block }: { data: Data; v: Video; block: string }) {
+  const c = data.conflicts[`${v.id}:${block}`];
+  if (!c) return null;
+  return (
+    <div className="conflict" role="alert" data-block={block}>
+      <b>{t("Este bloco foi alterado em outro lugar")}</b>
+      <span className="eyebrow">{t("Versão mais nova")} (v{c.version})</span>
+      <pre className="conflict-theirs">{blockText(c.theirs) || "—"}</pre>
+      <span className="meta">{t("Seu texto continua no editor abaixo.")}</span>
+      <div className="row" style={{ gap: 8 }}>
+        <button className="btn-dark" onClick={() => data.resolve(v.id, block, "mine")}>{t("Manter o meu")}</button>
+        <button className="btn-ghost" onClick={() => data.resolve(v.id, block, "theirs")}>{t("Usar a versão nova")}</button>
+      </div>
+    </div>
+  );
+}
+function Script({ data, v: v0 }: { data: Data; v: Video }) {
+  const v = withConflicts(data, v0);
+  const set = (block: string, value: any, base?: number) => data.saveBlock(v.id, block, value, base);
   const s = seriesOf(data.boot, v);
   const sp = sponsorOf(data.boot, v);
   const sc = v.script || {};
+  const ver = (block: string) => v.script_versions?.[block] ?? 0;
+  const cf = (block: string) => <ConflictNote data={data} v={v} block={block} />;
   const phrase = (tpl: string | null) => (tpl || "").replaceAll("{ep}", String(v.episode ?? "?"));
 
   if (v.format === "vertical") {
@@ -336,15 +422,15 @@ function Script({ data, v }: { data: Data; v: Video }) {
         <div className="row" style={{ gap: 28, alignItems: "flex-start" }}>
           <Reel v={v} s={s} chan={ch(data)} onCapa={(url) => set("capa", url)} />
           <div className="block" style={{ flex: 1 }}>
-            <h3>{t("1 · Gancho")}</h3>
-            <Field value={sc.gancho} onSave={(x) => set("gancho", x)} style={{ fontSize: 17, lineHeight: "26px" }} />
+            <h3>{t("1 · Gancho")}</h3>{cf("gancho")}{cf("capa")}
+            <Field value={sc.gancho} version={ver("gancho")} onSave={(x, b) => set("gancho", x, b)} style={{ fontSize: 17, lineHeight: "26px" }} />
             {s?.phrase_open && <div className="sand"><span className="eyebrow">{t("Frase da série")} · {s.name}</span>{phrase(s.phrase_open)}</div>}
           </div>
         </div>
-        <div className="block"><h3>{t("2 · Conteúdo")}</h3><Field value={sc.conteudo} onSave={(x) => set("conteudo", x)} /></div>
+        <div className="block"><h3>{t("2 · Conteúdo")}</h3>{cf("conteudo")}<Field value={sc.conteudo} version={ver("conteudo")} onSave={(x, b) => set("conteudo", x, b)} /></div>
         <div className="block">
-          <h3>{t("3 · Conclusão")}</h3>
-          <Field value={sc.conclusao} onSave={(x) => set("conclusao", x)} placeholder={t("Sua reflexão final…")} />
+          <h3>{t("3 · Conclusão")}</h3>{cf("conclusao")}
+          <Field value={sc.conclusao} version={ver("conclusao")} onSave={(x, b) => set("conclusao", x, b)} placeholder={t("Sua reflexão final…")} />
           {s?.phrase_close && <div className="sand"><span className="eyebrow">{t("Fechamento")}</span>{phrase(s.phrase_close)}</div>}
         </div>
       </>
@@ -356,21 +442,21 @@ function Script({ data, v }: { data: Data; v: Video }) {
     <>
       <YTPreview data={data} v={v} />
       <div className="block">
-        <h3>{t("1 · Hook")}</h3>
+        <h3>{t("1 · Hook")}</h3>{cf("hook")}
         {(["confirmacao", "promessa", "curiosidade", "pessoalidade"] as const).map((k) => (
           <div className="row" key={k}>
             <label className="eyebrow">{t(({ confirmacao: "Confirmação", promessa: "Promessa", curiosidade: "Curiosidade", pessoalidade: "Pessoalidade" } as any)[k])}</label>
-            <Field value={hook[k]} onSave={(x) => set("hook", { ...hook, [k]: x })} />
+            <Field value={hook[k]} version={ver("hook")} onSave={(x, b) => set("hook", { ...hook, [k]: x }, b)} />
           </div>
         ))}
         {(() => { const se = seriesOf(data.boot, v); return se || hook.serie ? (
           <div className="serie-box" style={{ borderColor: se?.color, background: se?.bg }}>
             <label className="eyebrow" style={{ color: se?.color }}>{se?.logo && <img src={se.logo} alt="" />}{t("Fala da série")}</label>
-            <Field value={hook.serie} onSave={(x) => set("hook", { ...hook, serie: x })} />
+            <Field value={hook.serie} version={ver("hook")} onSave={(x, b) => set("hook", { ...hook, serie: x }, b)} />
           </div>) : null; })()}
       </div>
-      <Content sc={sc} sp={sp} set={set} />
-      <div className="block"><h3>{t("3 · Conclusão")}</h3><Field value={sc.conclusao} onSave={(x) => set("conclusao", x)} /></div>
+      <Content sc={sc} sp={sp} set={set} ver={ver} cf={cf} />
+      <div className="block"><h3>{t("3 · Conclusão")}</h3>{cf("conclusao")}<Field value={sc.conclusao} version={ver("conclusao")} onSave={(x, b) => set("conclusao", x, b)} /></div>
     </>
   );
 }
@@ -403,14 +489,22 @@ function ThumbBox({ thumb, note, save }: { thumb?: string; note?: string; save: 
           <input ref={fileRef} type="file" accept="image/*" hidden onChange={async (e) => { const f = e.target.files?.[0]; if (f) { save({ thumb: await fileToThumb(f) }); setEdit(false); } }} />
           <button className="btn-dark" onClick={() => fileRef.current?.click()}>{t("Enviar imagem")}</button>
           {isImg && <button className="btn-ghost" onClick={() => { save({ thumb: "" }); setEdit(false); }}>{t("Remover imagem")}</button>}
-          <textarea className="ta" placeholder={t("Descrição da thumb (texto, ideia ou URL)")} defaultValue={text || ""} onBlur={(e) => {
-            const val = e.target.value.trim();
+          <SyncTextarea className="ta" placeholder={t("Descrição da thumb (texto, ideia ou URL)")} value={text || ""} onSave={(raw) => {
+            const val = raw.trim();
             if (/^https?:\/\/\S+$/.test(val)) save({ thumb: val }); else if (val !== (text || "")) save(isImg ? { thumb_note: val } : { thumb: "", thumb_note: val });
           }} />
         </div>
       )}
     </div>
   );
+}
+
+// Plain textarea that saves on blur. When the value changes elsewhere (e.g. "Use the newer version" after a conflict)
+// and the field is not being edited, it shows the new value, so a later blur can't save text that was rejected.
+function SyncTextarea({ value, onSave, ...rest }: { value: string; onSave: (s: string) => void } & Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, "value" | "defaultValue" | "onBlur">) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => { const el = ref.current; if (el && document.activeElement !== el && el.value !== value) el.value = value; }, [value]);
+  return <textarea ref={ref} {...rest} defaultValue={value} onBlur={(e) => e.target.value !== value && onSave(e.target.value)} />;
 }
 
 function YTPreview({ data, v }: { data: Data; v: Video }) {
@@ -420,10 +514,12 @@ function YTPreview({ data, v }: { data: Data; v: Video }) {
   const pairs: { title?: string; thumb?: string }[] = v.script.pairs || [{}, {}, {}];
   const save = (i: number, p: { title?: string; thumb?: string; thumb_note?: string }) => {
     const next = [0, 1, 2].map((j) => (j === i ? { ...pairs[j], ...p } : pairs[j] || {}));
-    data.patch(v.id, { script: { pairs: next } });
+    // based on the version whose text the inputs show (the owner's base while in conflict)
+    data.saveBlock(v.id, "pairs", next, v.script_versions?.pairs ?? 0);
   };
   return (
     <div className="block">
+      {["pairs", "thumb_desc"].map((b) => <ConflictNote key={b} data={data} v={v} block={b} />)}
       <div className="yt-h">
         <span className="meta"><I.YT w={16} /><span className="eyebrow" style={{ color: "var(--ink-strong)" }}>{t("Título + thumbnail · teste A/B")}</span></span>
         <button className="toggle" onClick={() => setCut(!cut)}>{t("Cortar título como no YouTube")}<span className={"sw" + (cut ? " on" : "")}><i /></span></button>
@@ -441,7 +537,7 @@ function YTPreview({ data, v }: { data: Data; v: Video }) {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   {cut && p.title && p.title.length > 60
                     ? <span className="yt-title" title={p.title} onClick={() => setCut(false)}>{p.title.slice(0, 58)}…</span>
-                    : <textarea className="yt-title" rows={1} placeholder={t("Título…")} defaultValue={p.title || ""} onBlur={(e) => e.target.value !== (p.title || "") && save(i, { title: e.target.value })} />}
+                    : <SyncTextarea className="yt-title" rows={1} placeholder={t("Título…")} value={p.title || ""} onSave={(x) => save(i, { title: x })} />}
                   <div className="yt-ch">{ch(data).name} · {p.title ? `${p.title.length} ${t("caracteres")}` : "—"}</div>
                 </div>
               </div>
@@ -450,7 +546,7 @@ function YTPreview({ data, v }: { data: Data; v: Video }) {
         })}
         <div className="yt-desc">
           <span className="eyebrow">{t("Descrição das thumbnails")}</span>
-          <Field value={v.script.thumb_desc || ""} placeholder={t("O que vai na tela, textos, prints, ideias…")} onSave={(t) => data.patch(v.id, { script: { thumb_desc: t } })} />
+          <Field value={v.script.thumb_desc || ""} version={v.script_versions?.thumb_desc ?? 0} placeholder={t("O que vai na tela, textos, prints, ideias…")} onSave={(t, b) => data.saveBlock(v.id, "thumb_desc", t, b)} />
         </div>
       </div>
     </div>

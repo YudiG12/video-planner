@@ -91,13 +91,15 @@ function blockItems(ed: Editor, pickImage: () => void) {
 }
 
 // ---------- field ----------
-export function Field({ value, onSave, placeholder, style }: { value: string; onSave: (s: string) => void; placeholder?: string; style?: React.CSSProperties }) {
+// `version` is the block's version; onSave gets the version the edited text was based on (for conflict checks).
+export function Field({ value, version, onSave, placeholder, style }: { value: string; version?: number; onSave: (s: string, baseVersion?: number) => void; placeholder?: string; style?: React.CSSProperties }) {
   const last = useRef(value || "");
+  const base = useRef(version);
   const file = useRef<HTMLInputElement>(null);
   const timer = useRef<number>();
   const save = (ed: Editor) => {
     const md: string = (ed.storage as any).markdown.getMarkdown();
-    if (md !== last.current) { last.current = md; onSave(md); }
+    if (md !== last.current) { last.current = md; onSave(md, base.current); }
   };
   const ed = useEditor({
     extensions: [
@@ -120,10 +122,14 @@ export function Field({ value, onSave, placeholder, style }: { value: string; on
   });
   const addImages = async (fs: File[]) => { if (!ed) return; for (const f of fs) { const u = await uploadImage(f); ed.chain().focus().setImage({ src: u, alt: "print" }).run(); } save(ed); };
   // text changed elsewhere (agent, another panel) and the field is not focused: update
+  // The base version only moves forward when the editor shows that version's text, so a change made elsewhere
+  // while the owner is typing makes their save conflict instead of silently overwriting it.
   useEffect(() => {
-    if (!ed || ed.isFocused) return;
-    if ((value || "") !== last.current) { last.current = value || ""; ed.commands.setContent(value || "", false); }
-  }, [value, ed]);
+    if (!ed) return;
+    if ((value || "") === last.current) { base.current = version; return; }
+    if (ed.isFocused) return;
+    last.current = value || ""; base.current = version; ed.commands.setContent(value || "", false);
+  }, [value, version, ed]);
   if (!ed) return null;
   const link = () => { const prev = ed.getAttributes("link").href; const u = prompt("Link", prev || "https://"); if (u === null) return; if (!u) ed.chain().focus().unsetLink().run(); else if (SAFE_URL.test(u.trim())) ed.chain().focus().extendMarkRange("link").setLink({ href: u.trim() }).run(); else alert(t("Use um link http:// ou https://")); };
   return (

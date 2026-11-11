@@ -86,7 +86,7 @@ Write the hook for the cache video.
 Create 3 reel ideas for the "Quick Tips" series, each with the next episode number.
 ```
 
-Tools: `list_videos`, `get_video`, `create_video`, `update_video`, `move_video`, `update_script_block`, `upload_image`, `list_series`, `update_series` (logo, colors, description), `next_episode`.
+Tools: `list_videos`, `get_video`, `create_video`, `update_video`, `move_video`, `get_script_block`, `update_script_block` (pass `base_version` so it never silently overwrites your edits), `upload_image`, `list_series`, `update_series` (logo, colors, description), `next_episode`.
 
 ## Run locally
 

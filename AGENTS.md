@@ -29,6 +29,7 @@ Builds the app, runs it on a throwaway local D1 with fake demo data (never produ
 | Image assets (png/jpeg/webp/gif, 1.5 MB) | `saveAsset` in `worker/store.ts` | api: upload / rejects |
 | MCP tools (list/create/update/move videos, script blocks, upload_image) | `worker/mcp.ts` | mcp: * |
 | Update a series (logo, color, bg, description): MCP `update_series`, REST `PATCH /api/series/:id` | `updateSeries` in `worker/store.ts`, `worker/mcp.ts`, `worker/index.ts` | api: update series * / mcp: update_series |
+| Per-block script versions: `base_version` conflicts (409), previous value, block-name allow-list; editor shows conflicts and keeps the owner's text | `setBlock`/`getBlock` in `worker/store.ts`, `GET/PUT /api/videos/:id/script/:block`, MCP `update_script_block`/`get_script_block`, `useData.saveBlock` + `ConflictNote` in `src/App.tsx`, `Field` in `src/editor.tsx` | api: same block saved twice… / previous value… / concurrent writes… / unknown block names / mcp: update_script_block… / ui: editing a script block… / ui: conflict… |
 | Auth: Cloudflare Access JWT or agent Bearer; localhost only with `DEV_OPEN=1` | `worker/index.ts` middleware | — (sensitive: human review) |
 
 # Pipeline (issue → PR → verify → merge → deploy)

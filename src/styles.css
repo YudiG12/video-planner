@@ -353,3 +353,7 @@ select,input[type=date]{border:1px solid var(--line);border-radius:var(--r);padd
 .serie-box{margin-top:12px;padding:12px 14px;border:1px solid;border-left-width:3px;border-radius:var(--r);display:flex;flex-direction:column;gap:6px}
 .serie-box .eyebrow{display:flex;align-items:center;gap:8px}
 .serie-box .eyebrow img{height:20px;width:auto}
+
+/* script block conflict (someone else saved the block first) */
+.conflict{display:flex;flex-direction:column;gap:8px;margin:4px 0 12px;padding:12px 14px;border:1px solid #E0B4B4;border-left-width:3px;border-radius:var(--r);background:#FDF5F5;color:var(--ink-strong)}
+.conflict-theirs{margin:0;white-space:pre-wrap;font:inherit;font-size:14px;line-height:21px;max-height:220px;overflow:auto;padding:8px 10px;background:var(--bg);border:1px solid var(--line);border-radius:var(--r)}

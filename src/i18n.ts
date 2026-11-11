@@ -9,6 +9,8 @@ const EN: Record<string, string> = {
   "+ Nova ideia": "+ New idea", "Nova ideia": "New idea",
   "Esse mês": "This month", "Produzindo": "Recording", "Editando": "Editing", "Finalizado": "Published", "Cancelados": "Cancelled",
   "Título + thumbnail · teste A/B": "Title + thumbnail · A/B test", "Cortar título como no YouTube": "Truncate title like YouTube",
+  "Este bloco foi alterado em outro lugar": "This block was changed somewhere else", "Versão mais nova": "Newer version",
+  "Seu texto continua no editor abaixo.": "Your text is still in the editor below.", "Manter o meu": "Keep mine", "Usar a versão nova": "Use the newer version",
   "PRINCIPAL": "MAIN", "Título…": "Title…", "caracteres": "characters",
   "Descrição das thumbnails": "Thumbnail notes", "O que vai na tela, textos, prints, ideias…": "What goes on screen: text, screenshots, ideas…",
   "Editar thumbnail": "Edit thumbnail", "Enviar imagem": "Upload image", "Remover imagem": "Remove image",
