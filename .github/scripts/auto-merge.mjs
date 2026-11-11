@@ -2,8 +2,11 @@
 // Each Codex verdict is bound to the commit it reviewed; only the exact Codex bot identity counts.
 const { GITHUB_REPOSITORY: R, GH_TOKEN, PR, DRY_RUN } = process.env;
 const CODEX = "chatgpt-codex-connector[bot]";
-const SENSITIVE_PATH = /^(wrangler.*\.jsonc|worker\/agent\.ts|SECURITY\.md|\.github\/)/;
-const SENSITIVE_CODE = /cf-access|ACCESS_|AGENT_TOKEN|DEV_OPEN|workers_dev|Access-Control|cors|safeEqual|unauthorized/i;
+// Owner rule: wait only for changes that could LOOSEN security (auth, Access, tokens, CORS, public routes, workers_dev)
+// or that change the pipeline itself. New infra (bindings, Durable Objects, queues) merges like any other change.
+const SENSITIVE_PATH = /^(worker\/agent\.ts|SECURITY\.md|\.github\/)/;
+const SENSITIVE_CODE = /cf-access|ACCESS_|AGENT_TOKEN|DEV_OPEN|workers_dev|preview_urls|"routes?"\s*:|custom_domain|Access-Control|cors|safeEqual|unauthorized/i;
+const TEST_ONLY = /^(scripts\/verify\.mjs|scripts\/demo-seed\.sql)$/; // local verify app: throwaway tokens, never deployed
 
 const api = async (path, init = {}) => {
   if (DRY_RUN && init.method && init.method !== "GET") { console.log(`[dry-run] ${init.method} ${path}`); return null; }
@@ -61,11 +64,17 @@ if ((repeated || failedShas.size >= MAX_ROUNDS) && !latest?.pass) {
 
 // Sensitive changes wait for the owner (patches read fully in memory, no pipes)
 const files = await all(`/pulls/${PR}/files`);
-const hits = files.filter((f) => SENSITIVE_PATH.test(f.filename) || (f.patch || "").split("\n").some((l) => /^[+-]/.test(l) && SENSITIVE_CODE.test(l))).map((f) => f.filename);
+const reasons = [];
+for (const f of files) {
+  if (SENSITIVE_PATH.test(f.filename)) { reasons.push(`\`${f.filename}\` (${f.filename.startsWith(".github/") ? "pipeline" : "auth"} file)`); continue; }
+  if (TEST_ONLY.test(f.filename)) continue;
+  const lines = (f.patch || "").split("\n").filter((l) => /^[+-]/.test(l) && !/^(\+\+\+|---)/.test(l) && SENSITIVE_CODE.test(l));
+  for (const l of lines.slice(0, 3)) reasons.push(`\`${f.filename}\`: \`${l.trim().slice(0, 140).replace(/`/g, "'")}\``);
+}
 const uninspectable = files.length >= 3000 || files.some((f) => !f.patch && f.status !== "removed" && /\.(ts|tsx|js|mjs|jsonc?)$/.test(f.filename));
-if (hits.length || uninspectable) {
+if (reasons.length || uninspectable) {
   await label("needs-owner");
-  await comment(`✋ **Waiting for @YudiG12:** this PR touches security-sensitive areas (${hits.join(", ") || "diff too large to inspect"}). Not merging automatically.`);
+  await comment(`✋ **Waiting for @YudiG12:** this PR may loosen security or changes the pipeline. Lines that triggered it:\n\n${reasons.map((r) => `- ${r}`).join("\n") || "- diff too large to inspect"}\n\nIf none of these loosen anything, remove the \`needs-owner\` label and it merges on the next Codex PASS.`);
   stop("sensitive");
 }
 
