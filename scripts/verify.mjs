@@ -7,9 +7,12 @@
 import { spawn, execSync } from "node:child_process";
 import { rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
+import { randomBytes } from "node:crypto";
 
-const PORT = await new Promise((r) => { const s = createServer().listen(0, () => { const p = s.address().port; s.close(() => r(p)); }); });
-const BASE = `http://localhost:${PORT}`, STATE = ".verify/state", OUT = "verify-out";
+const freePort = () => new Promise((r) => { const s = createServer().listen(0, () => { const p = s.address().port; s.close(() => r(p)); }); });
+const PORT = await freePort(), APORT = await freePort();
+const BASE = `http://localhost:${PORT}`, AGENT = `http://localhost:${APORT}`, STATE = ".verify/state", OUT = "verify-out";
+const AGENT_TOKEN = "verify-" + randomBytes(12).toString("hex"); // throwaway, local only
 const keep = process.argv.includes("--keep");
 const sh = (cmd) => execSync(cmd, { stdio: ["ignore", "pipe", "inherit"] }).toString();
 const results = [];
@@ -25,12 +28,24 @@ console.log("migrate + seed (isolated local D1)…");
 sh(`npx wrangler d1 migrations apply video-planner --local --persist-to ${STATE} -c wrangler.jsonc`);
 sh(`npx wrangler d1 execute video-planner --local --persist-to ${STATE} -c wrangler.jsonc --file scripts/demo-seed.sql`);
 
-const srv = spawn("npx", ["wrangler", "dev", "-c", "dist/video_planner/wrangler.json", "--port", String(PORT), "--persist-to", STATE, "--var", "DEV_OPEN:1"], { stdio: ["ignore", "pipe", "pipe"] });
+const srv = spawn("npx", ["wrangler", "dev", "-c", "dist/video_planner/wrangler.json", "--port", String(PORT), "--persist-to", STATE, "--var", "DEV_OPEN:1"], { stdio: ["ignore", "pipe", "pipe"], detached: true });
 let log = ""; srv.stdout.on("data", (d) => (log += d)); srv.stderr.on("data", (d) => (log += d));
-const stop = () => { try { srv.kill("SIGTERM"); } catch {} };
+let asrv;
+// each server runs in its own process group, so npx + wrangler + workerd all stop (a leftover would linger in the dev registry)
+const stop = () => { for (const p of [srv, asrv]) { try { process.kill(-p.pid, "SIGTERM"); } catch {} } };
 process.on("exit", stop);
+for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, () => process.exit(130));
 
 for (let i = 0; i < 60; i++) { try { if ((await fetch(BASE + "/api/bootstrap")).ok) break; } catch {} await new Promise((r) => setTimeout(r, 1000)); }
+// The agent Worker (Bearer only) on the same local D1; it reaches the app Worker's live hub through the local dev registry
+asrv = spawn("npx", ["wrangler", "dev", "-c", "wrangler.agent.jsonc", "--port", String(APORT), "--persist-to", STATE, "--var", `AGENT_TOKEN:${AGENT_TOKEN}`], { stdio: ["ignore", "pipe", "pipe"], detached: true });
+asrv.stdout.on("data", (d) => (log += d)); asrv.stderr.on("data", (d) => (log += d));
+const agentMcp = async (name, args, token = AGENT_TOKEN) => {
+  const r = await fetch(AGENT + "/mcp", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}` }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }) });
+  return { status: r.status, body: await r.json().catch(() => null) };
+};
+for (let i = 0; i < 60; i++) { try { if ((await agentMcp("list_series", {})).status === 200) break; } catch {} await new Promise((r) => setTimeout(r, 1000)); }
+const mcpOut = (r) => { assert(r.status === 200 && r.body?.result && !r.body.result.isError, JSON.stringify(r.body).slice(0, 300)); return JSON.parse(r.body.result.content[0].text); };
 
 const api = async (path, init) => { const r = await fetch(BASE + path, { ...init, headers: { "content-type": "application/json", ...(init?.headers || {}) } }); return { status: r.status, body: await r.json().catch(() => null) }; };
 const mcp = (name, args) => api("/mcp", { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }) });
@@ -196,15 +211,20 @@ await check("ui: conflict shows the newer text and keeps what the owner typed", 
   assert(/Plus my extra line\. Revised after the conflict\./.test(k.body.value) && k.body.previous?.value === "Agent rewrote the ending.", JSON.stringify(k.body));
   assert(/Revised after the conflict\./.test(await ed.innerText()), "editor reverted to an older draft");
 });
-await check("ui: accepting the newer title version updates the title input (no silent undo)", async () => {
+await check("ui: a live title change while the owner types conflicts; accepting it updates the input (no silent undo)", async () => {
   const c = await api("/api/videos", { method: "POST", body: JSON.stringify({ title: "verify titles", format: "longo" }) }); const id = c.body.id;
   await page.goto(`${BASE}/kanban#/video/${id}`, { waitUntil: "networkidle" }); await page.reload({ waitUntil: "networkidle" }); // load the new video
   const title = page.locator("textarea.yt-title").first(); await title.waitFor({ timeout: 5000 });
-  // the agent sets the titles while the page is open, then the owner types a different first title
+  // the owner is in the title field when the agent's titles arrive live (no reload); the owner then types and leaves:
+  // their save is based on the version they saw, so it must conflict instead of overwriting the agent's title
+  await title.click();
+  const refreshed = page.waitForResponse((r) => new URL(r.url()).pathname === "/api/videos" && r.request().method() === "GET", { timeout: 3000 });
   const agent = await put(id, "pairs", { value: [{ title: "Agent newer title" }, {}, {}], base_version: 0 }); assert(agent.status === 200 && agent.body.version === 1, `agent ${agent.status}`);
-  await title.click(); await page.keyboard.type("Owner conflicting title");
+  await refreshed; await page.waitForTimeout(100); // the live update landed while the field had focus
+  await page.keyboard.type("Owner conflicting title");
   await page.evaluate(() => document.activeElement?.blur());
   const note = page.locator('.conflict[data-block="pairs"]'); await note.waitFor({ timeout: 5000 });
+  const mid = await api(`/api/videos/${id}/script/pairs`); assert(mid.body.value?.[0]?.title === "Agent newer title", `owner's blur overwrote the agent's title: ${JSON.stringify(mid.body.value)}`);
   await note.getByRole("button", { name: /Use the newer|Usar a vers/ }).click();
   await note.waitFor({ state: "detached", timeout: 5000 });
   assert((await title.inputValue()) === "Agent newer title", `title input shows "${await title.inputValue()}"`);
@@ -214,6 +234,117 @@ await check("ui: accepting the newer title version updates the title input (no s
   assert(g.body.value?.[0]?.title === "Agent newer title" && g.body.version === 1, JSON.stringify(g.body));
   await api(`/api/videos/${id}`, { method: "DELETE" });
 });
+// ---- live updates (#11): writes reach an open page without reload ----
+const LIVE_TITLE = "Live demo: caching explained";
+const LIVE_END = "Caching is a trade. You keep a copy close so you stop paying for the trip.";
+let liveId;
+const col = (p, name) => p.locator(".col").filter({ has: p.locator(".col-h", { hasText: name }) });
+const liveOn = (p) => p.waitForFunction(() => document.documentElement.dataset.live === "on", null, { timeout: 5000 });
+const conclusionBlock = (p) => p.locator(".block", { has: p.locator("h3", { hasText: /Conclus/ }) }).first();
+await check("live: agent Worker requires its Bearer token", async () => {
+  const bad = await agentMcp("list_videos", {}, "wrong-token"); assert(bad.status === 401, `wrong token: ${bad.status}`);
+  const ok = await agentMcp("list_videos", {}); assert(Array.isArray(mcpOut(ok)), "list_videos via agent Worker");
+});
+await check("live: an agent move (agent Worker, MCP) shows on the open kanban within 2s, no reload, with a changed dot", async () => {
+  const c = await api("/api/videos", { method: "POST", body: JSON.stringify({ title: LIVE_TITLE, format: "longo", script: { conclusao: LIVE_END, conteudo: "Every cache answers one question: is this copy still good enough?" } }) });
+  liveId = c.body.id;
+  await page.goto(`${BASE}/kanban`, { waitUntil: "networkidle" }); await liveOn(page);
+  await page.evaluate(() => { window.__sameDocument = true; });
+  await col(page, /Ideas|Ideias/).locator(".card", { hasText: LIVE_TITLE }).waitFor({ timeout: 3000 });
+  const t0 = Date.now();
+  mcpOut(await agentMcp("move_video", { id: liveId, status: "Produzindo" }));
+  const card = col(page, /Recording|Produzindo/).locator(".card", { hasText: LIVE_TITLE });
+  await card.waitFor({ timeout: 2000 });
+  const ms = Date.now() - t0; assert(ms <= 2000, `took ${ms} ms`);
+  assert(await page.evaluate(() => window.__sameDocument === true), "page reloaded");
+  assert(await card.locator(".dot-changed").count() === 1, "no changed dot on the moved card");
+  await page.screenshot({ path: `${OUT}/live-kanban-moved.png` });
+});
+await check("live: agent editing a block highlights it, then marks inserted + removed text until \"ok, seen\"", async () => {
+  const card = col(page, /Recording|Produzindo/).locator(".card", { hasText: LIVE_TITLE });
+  await card.click();
+  const blk = conclusionBlock(page); await blk.locator(".rt").waitFor({ timeout: 5000 });
+  assert(await card.locator(".dot-changed").count() === 0, "dot still shown after opening the video");
+  const cur = mcpOut(await agentMcp("get_script_block", { id: liveId, block: "conclusao" }));
+  await page.locator('.agent-badge[data-block="conclusao"]').waitFor({ timeout: 2000 });
+  assert(/agent-editing/.test(await blk.getAttribute("class")), "block not highlighted while the agent edits");
+  await blk.scrollIntoViewIfNeeded(); await page.screenshot({ path: `${OUT}/live-agent-editing.png` });
+  const next = "Caching is a bet. You keep a fresh copy close so you stop paying for the slow trip.";
+  mcpOut(await agentMcp("update_script_block", { id: liveId, block: "conclusao", value: next, base_version: cur.version }));
+  await page.waitForFunction((t) => document.querySelector(".panel")?.innerText.includes(t), "fresh copy close", { timeout: 2000 }); // text lands without reload
+  const ch = page.locator('.change[data-block="conclusao"]'); await ch.waitFor({ timeout: 4000 });
+  const ins = (await ch.locator("ins").allInnerTexts()).join(" "), del = (await ch.locator("del").allInnerTexts()).join(" ");
+  assert(/bet/.test(ins) && /fresh/.test(ins) && /slow/.test(ins), `inserted: ${ins}`);
+  assert(/trade/.test(del) && !/copy/.test(del), `removed: ${del}`);
+  assert(await page.evaluate(() => window.__sameDocument === true), "page reloaded");
+  await blk.scrollIntoViewIfNeeded(); await page.screenshot({ path: `${OUT}/live-agent-changed.png` });
+  await ch.getByRole("button", { name: /ok, seen|ok, visto/ }).click();
+  await ch.waitFor({ state: "detached", timeout: 2000 });
+});
+await check("live: change marks clear when the video is reopened", async () => {
+  mcpOut(await agentMcp("update_script_block", { id: liveId, block: "conclusao", value: "Caching is a bet. Keep a fresh copy close." }));
+  const ch = page.locator('.change[data-block="conclusao"]'); await ch.waitFor({ timeout: 4000 });
+  await page.locator(".panel button[title=\"Close\"]").click();
+  await page.locator(".panel").waitFor({ state: "detached", timeout: 3000 });
+  await col(page, /Recording|Produzindo/).locator(".card", { hasText: LIVE_TITLE }).click();
+  await conclusionBlock(page).locator(".rt").waitFor({ timeout: 5000 });
+  assert(await page.locator(".change").count() === 0, "change marks still shown after reopening");
+});
+await check("live: owner typing in the same block keeps their text; \"Claude changed this block · view / apply\"", async () => {
+  const blk = conclusionBlock(page), ed = blk.locator(".rt").first();
+  await ed.click(); await page.keyboard.press("End"); await page.keyboard.type(" Owner draft in progress.");
+  const agentText = "Agent wrote a new ending while you typed.";
+  mcpOut(await agentMcp("update_script_block", { id: liveId, block: "conclusao", value: agentText }));
+  const note = blk.locator(".incoming"); await note.waitFor({ timeout: 2000 });
+  await page.waitForTimeout(1500); // past the 1.2s autosave of the owner's last keystroke: it must not fire while the note waits
+  assert(await note.count() === 1 && await page.locator('.conflict[data-block="conclusao"]').count() === 0, "autosave replaced the note with a conflict");
+  const mid = await api(`/api/videos/${liveId}/script/conclusao`); assert(mid.body.value === agentText, `owner's draft was autosaved: ${JSON.stringify(mid.body.value)}`);
+  assert(/Claude changed this block/.test(await note.innerText()) && /view/.test(await note.innerText()) && /apply/.test(await note.innerText()), await note.innerText());
+  assert(/Owner draft in progress\./.test(await ed.innerText()), "owner's text was replaced");
+  assert(await page.locator('.change[data-block="conclusao"]').count() === 0, "diff box shown while typing");
+  await note.getByRole("button", { name: "view" }).click();
+  await note.locator(".diff ins", { hasText: /Agent/ }).waitFor({ timeout: 2000 });
+  await blk.scrollIntoViewIfNeeded(); await page.screenshot({ path: `${OUT}/live-owner-typing.png` });
+  await note.getByRole("button", { name: "apply" }).click();
+  await note.waitFor({ state: "detached", timeout: 2000 });
+  assert((await ed.innerText()).trim() === agentText, `editor shows "${await ed.innerText()}"`);
+  await page.evaluate(() => document.activeElement?.blur()); await page.waitForTimeout(600);
+  const g = await api(`/api/videos/${liveId}/script/conclusao`); assert(g.body.value === agentText, `saved ${JSON.stringify(g.body.value)}`);
+});
+await check("live: owner typing in Content keeps focus and draft when the agent replaces it with a different length", async () => {
+  const blk = page.locator(".block", { has: page.locator("h3", { hasText: /Conte/ }) }).first(), ed = blk.locator(".rt").first();
+  await ed.click(); await page.keyboard.press("End"); await page.keyboard.type(" Owner content draft.");
+  const agentText = "A much longer agent rewrite of the content block, so the text before any marker changes length a lot.";
+  mcpOut(await agentMcp("update_script_block", { id: liveId, block: "conteudo", value: agentText }));
+  const note = blk.locator(".incoming"); await note.waitFor({ timeout: 2000 });
+  assert(await ed.evaluate((el) => el.contains(document.activeElement)), "editor lost focus");
+  assert(/Owner content draft\./.test(await ed.innerText()), "owner's draft was replaced");
+  const g = await api(`/api/videos/${liveId}/script/conteudo`); assert(g.body.value === agentText, `owner's draft was saved: ${JSON.stringify(g.body.value)}`);
+  await note.getByRole("button", { name: "apply" }).click(); await note.waitFor({ state: "detached", timeout: 2000 });
+  assert((await ed.innerText()).trim() === agentText, `editor shows "${await ed.innerText()}"`);
+  await page.evaluate(() => document.activeElement?.blur());
+});
+await check("live: a write through the app Worker (REST) reaches another open tab", async () => {
+  const p2 = await pctx.newPage(); await p2.goto(`${BASE}/kanban`, { waitUntil: "networkidle" }); await liveOn(p2);
+  const t0 = Date.now();
+  const r = await api(`/api/videos/${liveId}`, { method: "PATCH", body: JSON.stringify({ title: LIVE_TITLE + " (renamed)" }) }); assert(r.status === 200, `patch ${r.status}`);
+  await col(p2, /Recording|Produzindo/).locator(".card", { hasText: "(renamed)" }).waitFor({ timeout: 2000 });
+  assert(Date.now() - t0 <= 2000, "took more than 2s");
+  await p2.close();
+});
+await check("live: reduced motion turns the editing animation off", async () => {
+  const anim = async (reducedMotion) => {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion }); await offline(ctx);
+    const p = await ctx.newPage(); await p.goto(`${BASE}/kanban#/video/${liveId}`, { waitUntil: "networkidle" }); await liveOn(p);
+    mcpOut(await agentMcp("get_script_block", { id: liveId, block: "conclusao" }));
+    await p.locator('.agent-badge[data-block="conclusao"]').waitFor({ timeout: 2000 });
+    const name = await conclusionBlock(p).evaluate((el) => getComputedStyle(el, "::before").animationName);
+    await ctx.close(); return name;
+  };
+  const normal = await anim("no-preference"), reduced = await anim("reduce");
+  assert(normal === "agent-sweep" && reduced === "none", `no-preference: ${normal}, reduce: ${reduced}`);
+});
+
 await check("ui: full-screen video page", async () => {
   await page.goto(`${BASE}/kanban#/video/${firstId}`, { waitUntil: "networkidle" });
   await page.locator(".full-top").waitFor({ timeout: 5000 });
@@ -234,6 +365,25 @@ await check("ui: record main flow", async () => {
   const vid = await p.video().path(); await ctx.close();
   try { execSync(`ffmpeg -y -loglevel error -i ${vid} -vf "fps=8,scale=900:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse" ${OUT}/flow.gif`); }
   catch { console.log("      (ffmpeg not found: kept webm only)"); }
+});
+// ---- GIF of a live edit: the agent edits a block while the panel is open ----
+await check("ui: record live update", async () => {
+  const c = await api("/api/videos", { method: "POST", body: JSON.stringify({ title: "Live GIF: why queues matter", format: "longo", status: "Esse mês", script: { conclusao: "Queues let slow work wait without making people wait." } }) });
+  const id = c.body.id;
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, recordVideo: { dir: `${OUT}/video-live`, size: { width: 1280, height: 800 } } });
+  await offline(ctx);
+  const p = await ctx.newPage();
+  await p.goto(`${BASE}/kanban`, { waitUntil: "networkidle" }); await liveOn(p); await p.waitForTimeout(600);
+  mcpOut(await agentMcp("move_video", { id, status: "Produzindo" })); await p.waitForTimeout(1200);
+  await col(p, /Recording|Produzindo/).locator(".card", { hasText: "why queues" }).click(); await p.waitForTimeout(800);
+  await conclusionBlock(p).scrollIntoViewIfNeeded();
+  const cur = mcpOut(await agentMcp("get_script_block", { id, block: "conclusao" })); await p.waitForTimeout(1800);
+  mcpOut(await agentMcp("update_script_block", { id, block: "conclusao", value: "Queues let slow work wait in line, so people never have to.", base_version: cur.version }));
+  await p.locator('.change[data-block="conclusao"]').waitFor({ timeout: 4000 }); await p.waitForTimeout(2200);
+  const vid = await p.video().path(); await ctx.close();
+  try { execSync(`ffmpeg -y -loglevel error -i ${vid} -vf "fps=8,scale=900:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse" ${OUT}/live.gif`); }
+  catch { console.log("      (ffmpeg not found: kept webm only)"); }
+  await api(`/api/videos/${id}`, { method: "DELETE" });
 });
 await browser.close();
 

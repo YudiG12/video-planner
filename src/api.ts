@@ -11,8 +11,14 @@ export interface Video {
 export interface Channel { name: string; handle: string; avatar: string }
 export interface Boot { series: Series[]; sponsors: Sponsor[]; statuses: string[]; channel?: Channel; locale?: string }
 
+// Random id per tab, sent with every request: live events caused by this tab are not echoed back to it.
+export const CLIENT_ID = (crypto.randomUUID?.() || String(Math.random()).slice(2)).replace(/[^\w-]/g, "");
+const H = { "content-type": "application/json", "x-client-id": CLIENT_ID };
+// One message from /api/live (worker/live.ts)
+export type LiveMessage = { t: "video" | "block" | "editing" | "removed" | "series"; id: string; block?: string; version?: number; fields?: string[]; actor: string; origin: string; at: number };
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(path, { ...init, headers: { "content-type": "application/json", ...(init?.headers || {}) } });
+  const r = await fetch(path, { ...init, headers: { ...H, ...(init?.headers || {}) } });
   if (!r.ok) throw new Error(`${r.status} ${path}`);
   return r.json();
 }
@@ -21,7 +27,7 @@ export type BlockConflict = { error: string; code: "conflict"; block: string; cu
 export const api = {
   // 409 resolves to the conflict (current value + version) instead of throwing
   putBlock: async (id: string, block: string, value: any, base_version: number): Promise<BlockSaved | BlockConflict> => {
-    const r = await fetch(`/api/videos/${id}/script/${encodeURIComponent(block)}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ value, base_version }) });
+    const r = await fetch(`/api/videos/${id}/script/${encodeURIComponent(block)}`, { method: "PUT", headers: H, body: JSON.stringify({ value, base_version }) });
     if (r.status === 409) return r.json();
     if (!r.ok) throw new Error(`${r.status} script/${block}`);
     return r.json();

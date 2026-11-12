@@ -11,6 +11,7 @@ import { Markdown } from "tiptap-markdown";
 import GlobalDragHandle from "tiptap-extension-global-drag-handle";
 import * as I from "./icons";
 import { t, dateLocale, weekdays, setLocale } from "./i18n";
+import { DiffText } from "./diff";
 
 // only http(s) and internal paths; blocks javascript:, data:, etc.
 const SAFE_URL = /^(https?:\/\/|\/(?!\/))/i;
@@ -92,11 +93,22 @@ function blockItems(ed: Editor, pickImage: () => void) {
 
 // ---------- field ----------
 // `version` is the block's version; onSave gets the version the edited text was based on (for conflict checks).
-export function Field({ value, version, onSave, placeholder, style }: { value: string; version?: number; onSave: (s: string, baseVersion?: number) => void; placeholder?: string; style?: React.CSSProperties }) {
+// `vb` marks which video block this is (the app checks it to know the owner is typing there); `remote` names who
+// changed the block when a change arrives while the owner is typing: the text is kept and a "view / apply" note shows.
+export function Field({ value, version, onSave, placeholder, style, vb, remote }: { value: string; version?: number; onSave: (s: string, baseVersion?: number) => void; placeholder?: string; style?: React.CSSProperties; vb?: string; remote?: string }) {
   const last = useRef(value || "");
   const base = useRef(version);
   const file = useRef<HTMLInputElement>(null);
   const timer = useRef<number>();
+  // a newer value that arrived while the owner was typing here (not applied yet)
+  const [incoming, setIncomingState] = useState<{ value: string; version?: number } | null>(null);
+  const inc = useRef(incoming);
+  const setIncoming = (x: typeof incoming) => { inc.current = x; setIncomingState(x); };
+  const [view, setView] = useState(false);
+  const apply = (ed: Editor, x: { value: string; version?: number }) => {
+    last.current = x.value; base.current = x.version; setIncoming(null); setView(false);
+    ed.commands.setContent(x.value, false);
+  };
   const save = (ed: Editor) => {
     const md: string = (ed.storage as any).markdown.getMarkdown();
     if (md !== last.current) { last.current = md; onSave(md, base.current); }
@@ -117,8 +129,15 @@ export function Field({ value, version, onSave, placeholder, style }: { value: s
       handlePaste: (_v, e) => { const fs = Array.from(e.clipboardData?.files || []).filter((f) => f.type.startsWith("image/")); if (!fs.length) return false; addImages(fs); return true; },
       handleDrop: (_v, e) => { const fs = Array.from((e as DragEvent).dataTransfer?.files || []).filter((f) => f.type.startsWith("image/")); if (!fs.length) return false; addImages(fs); return true; },
     },
-    onUpdate: ({ editor }) => { window.clearTimeout(timer.current); timer.current = window.setTimeout(() => save(editor), 1200); },
-    onBlur: ({ editor }) => { window.clearTimeout(timer.current); save(editor); },
+    // no autosave while a newer value is waiting: the owner decides (apply, or keep typing and save on blur -> conflict note)
+    onUpdate: ({ editor }) => { window.clearTimeout(timer.current); if (!inc.current) timer.current = window.setTimeout(() => { if (!inc.current) save(editor); }, 1200); },
+    onBlur: ({ editor }) => {
+      window.clearTimeout(timer.current);
+      const x = inc.current;
+      // left without changing anything: just take the newer value
+      if (x && (editor.storage as any).markdown.getMarkdown() === last.current) { apply(editor, x); return; }
+      setIncoming(null); setView(false); save(editor);
+    },
   });
   const addImages = async (fs: File[]) => { if (!ed) return; for (const f of fs) { const u = await uploadImage(f); ed.chain().focus().setImage({ src: u, alt: "print" }).run(); } save(ed); };
   // text changed elsewhere (agent, another panel) and the field is not focused: update
@@ -126,13 +145,25 @@ export function Field({ value, version, onSave, placeholder, style }: { value: s
   // while the owner is typing makes their save conflict instead of silently overwriting it.
   useEffect(() => {
     if (!ed) return;
-    if ((value || "") === last.current) { base.current = version; return; }
-    if (ed.isFocused) return;
-    last.current = value || ""; base.current = version; ed.commands.setContent(value || "", false);
+    if ((value || "") === last.current) { base.current = version; if (inc.current) setIncoming(null); return; }
+    if (ed.isFocused) { window.clearTimeout(timer.current); setIncoming({ value: value || "", version }); return; } // cancel the pending autosave too
+    last.current = value || ""; base.current = version; setIncoming(null); ed.commands.setContent(value || "", false);
   }, [value, version, ed]);
   if (!ed) return null;
   const link = () => { const prev = ed.getAttributes("link").href; const u = prompt("Link", prev || "https://"); if (u === null) return; if (!u) ed.chain().focus().unsetLink().run(); else if (SAFE_URL.test(u.trim())) ed.chain().focus().extendMarkRange("link").setLink({ href: u.trim() }).run(); else alert(t("Use um link http:// ou https://")); };
+  // the note sits outside .rt-wrap: tippy moves the menus' nodes, so React must not insert siblings next to them
   return (
+    <div className="rt-field" data-vb={vb}>
+      {incoming && (
+        <div className="incoming" role="status" onMouseDown={(e) => e.preventDefault() /* keep the editor focused */}>
+          <span>{t("{who} alterou este bloco").replace("{who}", remote || t("Alguém"))}</span>
+          <span aria-hidden>·</span>
+          <button className="linkbtn" onClick={() => setView(!view)}>{view ? t("ocultar") : t("ver")}</button>
+          <span aria-hidden>/</span>
+          <button className="linkbtn" onClick={() => apply(ed, incoming)}>{t("aplicar")}</button>
+          {view && <DiffText before={last.current} after={incoming.value} />}
+        </div>
+      )}
     <div className="rt-wrap">
       <BubbleMenu editor={ed} tippyOptions={{ duration: 120, placement: "top-start" }} shouldShow={({ editor, state }) => !state.selection.empty && !editor.isActive("ytref") && !editor.isActive("image")}>
         <div className="menu">
@@ -152,6 +183,7 @@ export function Field({ value, version, onSave, placeholder, style }: { value: s
       </FloatingMenu>
       <input ref={file} type="file" accept="image/*" multiple hidden onChange={(e) => { addImages(Array.from(e.target.files || [])); e.target.value = ""; }} />
       <EditorContent editor={ed} onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "k") { e.preventDefault(); link(); } }} />
+    </div>
     </div>
   );
 }

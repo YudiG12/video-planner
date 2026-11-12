@@ -11,6 +11,7 @@ browser ── Cloudflare Access ──► video-planner (Worker)
 AI agent ── Bearer ─────────────► video-planner-agent (Worker)
                                    └─ /api/* + /mcp (JSON-RPC, Streamable HTTP)
 both ──► D1 (SQLite): videos, series, sponsors, history, assets
+both ──► LiveHub (Durable Object, in video-planner) ──WebSocket /api/live──► open app tabs
 ```
 
 | Component | Decision | Why |
@@ -19,6 +20,7 @@ both ──► D1 (SQLite): videos, series, sponsors, history, assets
 | D1 | Single SQLite database | One user, low write volume; free tier is plenty. |
 | Script as JSON blocks | `videos.script` holds `pairs`, `hook`, `conteudo`, `insercao`, `conclusao` (or `capa`, `gancho` for reels); `PATCH` merges one level deep | The agent edits one block without overwriting the rest. |
 | Per-block versions | `script_blocks` (video_id, block) holds `version` + `prev` (previous value). Writes take an optional `base_version` and are applied in one D1 batch (conditional version bump + `json_set` of the block); a mismatch returns 409 with the current value. Block names are an allow-list per format (`SCRIPT_BLOCKS`). | Owner and agent can't silently overwrite each other; `prev` is the base for showing what changed. |
+| Live updates | One Durable Object (`LiveHub`, WebSocket Hibernation) defined in the main Worker; the agent Worker binds to it with `script_name`. After each write the `Store` sends a tiny event (`video` / `block` / `editing` / `removed` / `series`, plus actor and the tab's `x-client-id`) with `waitUntil`; tabs connect to `GET /api/live` (same auth middleware as the API) and reconnect with backoff. Events carry no script text: the tab re-reads `/api/videos` and diffs what it had against what it got. | No polling; hibernated sockets cost nothing when idle; a failed broadcast never fails a write; data still only flows through the authenticated API. |
 | Text as markdown | TipTap in the browser, markdown in the database | The agent reads and writes plain text; the UI renders it live. |
 | Images in D1 | Resized to JPEG in the browser (≤1600 px), stored as BLOB in `assets` | No R2 bucket to set up; screenshots are small. |
 | Auth for people | Cloudflare Access in front; the Worker verifies the JWT against the team's certs | Zero login code; defense in depth if a route ever bypasses Access. |

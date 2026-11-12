@@ -34,6 +34,8 @@ const EN: Record<string, string> = {
   "Print / imagem": "Screenshot / image", "Vídeo do YouTube": "YouTube video", "Divisor": "Divider", "Inserir bloco": "Insert block",
   "Negrito ⌘B": "Bold ⌘B", "Itálico ⌘I": "Italic ⌘I", "Riscado": "Strikethrough", "Código": "Code", "Link ⌘K": "Link ⌘K",
   "Link do vídeo do YouTube": "YouTube video link", "Link": "Link", "Use um link http:// ou https://": "Use an http:// or https:// link", "Remover": "Remove", "Subir": "Move up", "Recentes": "Recent", "Descer": "Move down",
+  "Alterado pelo Claude": "Changed by Claude", "Claude está editando…": "Claude is editing…", "Claude alterou este bloco": "Claude changed this block",
+  "ok, visto": "ok, seen", "Alguém": "Someone", "{who} alterou este bloco": "{who} changed this block", "ver": "view", "ocultar": "hide", "aplicar": "apply",
   "Ver detalhes": "Details", "Editou": "Edited", "Criou": "Created", "Moveu para": "Moved to",
 };
 export const t = (pt: string) => (locale === "en" ? EN[pt] ?? pt : pt);

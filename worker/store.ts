@@ -1,4 +1,5 @@
 // Single data layer: the REST API and MCP share the same functions.
+import type { LiveEvent } from "./live";
 export type Format = "longo" | "vertical";
 export const STATUSES = ["Ideias", "Esse mês", "Produzindo", "Editando", "Finalizado", "Cancelados"] as const;
 
@@ -60,8 +61,10 @@ export function validateSeriesPatch(p: unknown): string | null {
 }
 
 export class Store {
-  constructor(private db: D1Database, private actor: string) {}
+  // notify: live-update hook (see worker/live.ts), called after each successful write
+  constructor(private db: D1Database, private actor: string, private notify?: (ev: LiveEvent) => void) {}
   get database() { return this.db; }
+  private emit(ev: LiveEvent) { try { this.notify?.(ev); } catch {} }
 
   async bootstrap() {
     const [series, sponsors] = await Promise.all([
@@ -108,6 +111,7 @@ export class Store {
       id, v.title, v.format, status, v.series_id ?? null, episode, v.sponsor_id ?? null, v.publish_date ?? null,
       (max?.m ?? 0) + 1, JSON.stringify(v.script ?? {}), JSON.stringify(v.derivatives ?? {})).run();
     await this.log(id, "Criou o vídeo");
+    this.emit({ t: "video", id });
     return this.get(id);
   }
 
@@ -156,6 +160,8 @@ export class Store {
     const known = SCRIPT_BLOCKS[r.format] ?? [];
     if (!known.includes(block)) return { error: `unknown script block ${JSON.stringify(block)} for format ${r.format} (allowed: ${known.join(", ")})`, status: 400 };
     const version = r.version ?? 0;
+    // the agent reads a block right before editing it: the open app highlights it until the write lands
+    if (this.actor === "agente") this.emit({ t: "editing", id, block });
     return { block, value: r.value == null ? null : JSON.parse(r.value), version,
       previous: version > 0 ? { value: r.prev == null ? null : JSON.parse(r.prev), version: version - 1 } : null,
       updated_by: r.actor ?? null, updated_at: r.updated_at ?? null };
@@ -189,6 +195,7 @@ export class Store {
     if (!res[1].meta.changes) return this.conflict((await this.get(id))!, block);
     const version = (res[3].results[0] as { version: number }).version;
     await this.log(id, `Editou ${block}`, { script: { [block]: cur.script[block] ?? null } });
+    this.emit({ t: "block", id, block, version });
     return { block, value: value ?? null, version };
   }
 
@@ -213,6 +220,7 @@ export class Store {
     const label = changed.includes("status") ? `Mudou o status pra ${patch.status}`
       : `Editou ${changed.join(", ")}`;
     await this.log(id, label, before);
+    this.emit({ t: "video", id, fields: changed });
     return this.get(id);
   }
 
@@ -240,12 +248,13 @@ export class Store {
     const sets: string[] = [];
     const args: unknown[] = [];
     for (const k of SERIES_FIELDS) if (k in patch) { sets.push(`${k} = ?`); args.push(patch[k] ?? null); }
-    if (sets.length) await this.db.prepare(`UPDATE series SET ${sets.join(", ")} WHERE id = ?`).bind(...args, id).run();
+    if (sets.length) { await this.db.prepare(`UPDATE series SET ${sets.join(", ")} WHERE id = ?`).bind(...args, id).run(); this.emit({ t: "series", id }); }
     return (await this.db.prepare("SELECT * FROM series WHERE id = ?").bind(id).first())!;
   }
 
   async remove(id: string) {
     await this.db.prepare("DELETE FROM videos WHERE id = ?").bind(id).run();
+    this.emit({ t: "removed", id });
     return { ok: true };
   }
 }

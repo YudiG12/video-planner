@@ -1,9 +1,12 @@
 import { Hono } from "hono";
 import { Store, saveAsset, isBlockError } from "./store";
 import { handleMcp } from "./mcp";
+import { liveNotifier, liveStub, type LiveHub } from "./live";
+export { LiveHub } from "./live";
 
 type Env = {
   DB: D1Database;
+  LIVE?: DurableObjectNamespace<LiveHub>; // live-update hub (agent Worker binds it via script_name)
   AGENT_TOKEN?: string;        // agent Bearer token (MCP/API)
   ACCESS_TEAM_DOMAIN?: string; // e.g. yourteam.cloudflareaccess.com
   ACCESS_AUD?: string;         // Access app's Application Audience (AUD)
@@ -58,8 +61,19 @@ app.use("*", async (c, next) => {
   if (!ok) return c.json({ error: "unauthorized" }, 401);
   if (["POST", "PATCH", "PUT", "DELETE"].includes(c.req.method) && !(c.req.header("content-type") || "").startsWith("application/json"))
     return c.json({ error: "content-type must be application/json" }, 415);
-  c.set("store", new Store(c.env.DB, isAgent ? "agente" : "owner"));
+  const actor = isAgent ? "agente" : "owner";
+  // x-client-id: random per-tab id the app sends, so a tab can skip the echo of its own writes
+  const origin = (c.req.header("x-client-id") || "").replace(/[^\w-]/g, "").slice(0, 40);
+  c.set("store", new Store(c.env.DB, actor, liveNotifier(c.env, c.executionCtx, actor, origin)));
   await next();
+});
+
+// Live updates (WebSocket). Same auth as every other route (middleware above); the hub only accepts upgrades here.
+app.get("/api/live", (c) => {
+  const hub = liveStub(c.env);
+  if (!hub) return c.json({ error: "live updates not configured" }, 501);
+  if (c.req.header("upgrade")?.toLowerCase() !== "websocket") return c.json({ error: "expected websocket" }, 426);
+  return hub.fetch(c.req.raw);
 });
 
 app.all("/mcp", (c) => handleMcp(c.req.raw, c.var.store));
