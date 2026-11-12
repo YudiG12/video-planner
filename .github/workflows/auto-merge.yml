@@ -1,7 +1,6 @@
 name: Auto-merge
-# Merges a PR when Codex (the independent verifier) passes it and CI is green.
-# Waits for the owner when the PR touches security-sensitive paths, and trips a
-# circuit breaker after 2 failed verifications.
+# Merges every PR when Codex (the independent verifier) passes it and CI is green,
+# then publishes a Release + CHANGELOG.md line. Circuit breaker on repeated findings or 5 rounds.
 on:
   pull_request_review: { types: [submitted] }
   issue_comment: { types: [created] }
