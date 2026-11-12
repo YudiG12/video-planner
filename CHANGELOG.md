@@ -1,3 +1,5 @@
 # Changelog
 
 One line per merged PR (newest first). Each links to a release with the verify GIF and screenshots.
+
+- 2026-11-12 · 🔒 **Full auto-merge, auth checks in verify, changelog with GIFs per merge** ([#16](https://github.com/YudiG12/video-planner/pull/16) · [release with GIF/screens](https://github.com/YudiG12/video-planner/releases/tag/pr-16))
