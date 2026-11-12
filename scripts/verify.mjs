@@ -387,6 +387,61 @@ await check("ui: record live update", async () => {
 });
 await browser.close();
 
+// ---- Auth: a second server configured like production (agent token set). Guards the "no human review" pipeline:
+// a PR that loosens auth fails here instead of merging.
+{
+  const P2 = await new Promise((r) => { const s = createServer().listen(0, () => { const p = s.address().port; s.close(() => r(p)); }); });
+  const B2 = `http://localhost:${P2}`, TOKEN = randomBytes(24).toString("hex"); // throwaway, never deployed
+  const s2 = spawn("npx", ["wrangler", "dev", "-c", "dist/video_planner/wrangler.json", "--port", String(P2), "--persist-to", STATE, "--var", `AGENT_TOKEN:${TOKEN}`, "--var", "DEV_OPEN:1"], { stdio: ["ignore", "pipe", "pipe"], detached: true });
+  s2.stdout.on("data", (d) => (log += d)); s2.stderr.on("data", (d) => (log += d));
+  const kill2 = () => { try { process.kill(-s2.pid, "SIGTERM"); } catch {} };
+  process.on("exit", kill2);
+  const get = (path, headers = {}) => fetch(B2 + path, { headers }).then((r) => r.status).catch(() => 0);
+  for (let i = 0; i < 60 && (await get("/api/bootstrap")) === 0; i++) await new Promise((r) => setTimeout(r, 1000));
+  await check("auth: no credentials → 401 even on localhost with DEV_OPEN once a token is configured", async () => {
+    for (const p of ["/api/bootstrap", "/api/videos", "/mcp"]) { const st = await get(p); assert(st === 401, `${p} → ${st}`); }
+  });
+  await check("auth: wrong / empty Bearer → 401", async () => {
+    for (const h of ["Bearer wrong", "Bearer ", `Bearer ${TOKEN}x`]) { const st = await get("/api/videos", { authorization: h }); assert(st === 401, `"${h}" → ${st}`); }
+  });
+  await check("auth: forged Access JWT header → 401", async () => {
+    const st = await get("/api/videos", { "cf-access-jwt-assertion": [{ alg: "RS256" }, { sub: "x" }].map((o) => Buffer.from(JSON.stringify(o)).toString("base64url")).join(".") + ".c2ln" }); assert(st === 401, `${st}`);
+  });
+  await check("auth: correct Bearer → 200", async () => {
+    const st = await get("/api/videos", { authorization: `Bearer ${TOKEN}` }); assert(st === 200, `${st}`);
+  });
+  kill2();
+}
+// Access JWT signature, tested directly on worker/auth.ts with keys made here (the real JWKS fetch is stubbed).
+{
+  const js = execSync("npx esbuild worker/auth.ts --format=esm --log-level=error").toString();
+  const auth = await import("data:text/javascript;base64," + Buffer.from(js).toString("base64"));
+  const { subtle } = globalThis.crypto, TEAM = "verify.cloudflareaccess.com", AUD = "verify-aud";
+  const gen = () => subtle.generateKey({ name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" }, true, ["sign", "verify"]);
+  const good = await gen(), evil = await gen();
+  const jwk = { ...(await subtle.exportKey("jwk", good.publicKey)), kid: "k1" };
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (u) => { assert(String(u) === `https://${TEAM}/cdn-cgi/access/certs`, `fetched ${u}`); return new Response(JSON.stringify({ keys: [jwk] })); };
+  const b64 = (x) => Buffer.from(typeof x === "string" ? x : new Uint8Array(x)).toString("base64url");
+  const now = Math.floor(Date.now() / 1000);
+  const sign = async (key, claims = {}, header = {}) => {
+    const h = b64(JSON.stringify({ alg: "RS256", kid: "k1", ...header })), p = b64(JSON.stringify({ aud: [AUD], iss: `https://${TEAM}`, exp: now + 300, ...claims }));
+    return `${h}.${p}.${b64(await subtle.sign("RSASSA-PKCS1-v1_5", key.privateKey, new TextEncoder().encode(`${h}.${p}`)))}`;
+  };
+  const ok = async (jwt) => { auth._resetCerts(); return auth.verifyAccess(jwt, TEAM, AUD).catch(() => false); };
+  try {
+    await check("auth: Access JWT signed by the team key is accepted", async () => assert(await ok(await sign(good)) === true, "rejected a valid JWT"));
+    await check("auth: Access JWT with valid claims but a forged signature → rejected", async () => assert(await ok(await sign(evil)) === false, "accepted forged signature"));
+    await check("auth: Access JWT tampered after signing → rejected", async () => {
+      const [h, , sig] = (await sign(good)).split("."); const p = b64(JSON.stringify({ aud: [AUD], iss: `https://${TEAM}`, exp: now + 300, email: "attacker@x" }));
+      assert(await ok(`${h}.${p}.${sig}`) === false, "accepted tampered payload");
+    });
+    await check("auth: Access JWT with wrong aud / iss / expired / alg none → rejected", async () => {
+      for (const [c, h] of [[{ aud: ["other"] }], [{ iss: "https://evil.com" }], [{ exp: now - 10 }], [{}, { alg: "none" }]]) assert(await ok(await sign(good, c, h)) === false, `accepted ${JSON.stringify({ ...c, ...h })}`);
+    });
+  } finally { globalThis.fetch = realFetch; }
+}
+
 const failed = results.filter((r) => !r.ok);
 writeFileSync(`${OUT}/report.json`, JSON.stringify({ verdict: failed.length ? "FAIL" : "PASS", results }, null, 2));
 if (failed.length) writeFileSync(`${OUT}/server.log`, log);

@@ -1,10 +1,11 @@
-// Pipeline decision for one PR: merge | wait for owner | circuit breaker. See AGENTS.md "Pipeline".
+// Pipeline decision for one PR: merge | circuit breaker. See AGENTS.md "Pipeline".
+// No human review: every PR merges on Codex PASS + green CI (security is guarded by the auth checks in verify).
+// After merging it publishes a GitHub Release (summary + proof GIF/screens) and a CHANGELOG.md line.
 // Each Codex verdict is bound to the commit it reviewed; only the exact Codex bot identity counts.
 const { GITHUB_REPOSITORY: R, GH_TOKEN, PR, DRY_RUN } = process.env;
 const CODEX = "chatgpt-codex-connector[bot]";
-// Owner rule: wait only for changes that could LOOSEN security (auth, Access, tokens, CORS, public routes, workers_dev)
-// Pipeline changes (.github/) and new infra (bindings, Durable Objects, queues) merge like any other change (owner's call).
-const SENSITIVE_PATH = /^(worker\/agent\.ts|SECURITY\.md)/;
+// Sensitive = could loosen security. Only flagged 🔒 in the changelog, never blocks.
+const SENSITIVE_PATH = /^(wrangler.*\.jsonc|worker\/agent\.ts|SECURITY\.md|\.github\/)/;
 const SENSITIVE_CODE = /cf-access|ACCESS_|AGENT_TOKEN|DEV_OPEN|workers_dev|preview_urls|"routes?"\s*:|custom_domain|Access-Control|cors|safeEqual|unauthorized/i;
 const TEST_ONLY = /^(scripts\/verify\.mjs|scripts\/demo-seed\.sql)$/; // local verify app: throwaway tokens, never deployed
 
@@ -23,7 +24,8 @@ if (!PR) stop("no PR");
 const pr = await api(`/pulls/${PR}`);
 if (pr.state !== "open" || pr.draft) stop(`PR ${PR}: ${pr.state}${pr.draft ? " draft" : ""}`);
 const labels = pr.labels.map((l) => l.name);
-if (labels.includes("needs-owner") || labels.includes("circuit-breaker")) stop("waiting for owner");
+// manual brake only: the pipeline never adds needs-owner, but the owner can put it on a PR to hold it
+if (labels.includes("needs-owner") || labels.includes("circuit-breaker")) stop("held by label");
 const head = pr.head.sha;
 
 // Verdicts: one per Codex review/comment, each tied to the commit it names
@@ -62,21 +64,9 @@ if ((repeated || failedShas.size >= MAX_ROUNDS) && !latest?.pass) {
   stop("circuit breaker");
 }
 
-// Sensitive changes wait for the owner (patches read fully in memory, no pipes)
+// Sensitive changes no longer wait: they are only flagged (🔒) in the release and changelog
 const files = await all(`/pulls/${PR}/files`);
-const reasons = [];
-for (const f of files) {
-  if (SENSITIVE_PATH.test(f.filename)) { reasons.push(`\`${f.filename}\` (auth file)`); continue; }
-  if (TEST_ONLY.test(f.filename)) continue;
-  const lines = (f.patch || "").split("\n").filter((l) => /^[+-]/.test(l) && !/^(\+\+\+|---)/.test(l) && SENSITIVE_CODE.test(l));
-  for (const l of lines.slice(0, 3)) reasons.push(`\`${f.filename}\`: \`${l.trim().slice(0, 140).replace(/`/g, "'")}\``);
-}
-const uninspectable = files.length >= 3000 || files.some((f) => !f.patch && f.status !== "removed" && /\.(ts|tsx|js|mjs|jsonc?)$/.test(f.filename));
-if (reasons.length || uninspectable) {
-  await label("needs-owner");
-  await comment(`✋ **Waiting for @YudiG12:** this PR may loosen security. Lines that triggered it:\n\n${reasons.map((r) => `- ${r}`).join("\n") || "- diff too large to inspect"}\n\nIf none of these loosen anything, remove the \`needs-owner\` label and it merges on the next Codex PASS.`);
-  stop("sensitive");
-}
+const sensitive = files.filter((f) => !TEST_ONLY.test(f.filename)).filter((f) => SENSITIVE_PATH.test(f.filename) || (f.patch || "").split("\n").some((l) => /^[+-]/.test(l) && SENSITIVE_CODE.test(l))).map((f) => f.filename);
 
 const runs = await api(`/commits/${head}/check-runs`);
 const ci = runs.check_runs.find((c) => c.name === "check")?.conclusion;
@@ -85,6 +75,27 @@ if (!latest?.pass) stop("no Codex PASS for head commit");
 
 await api(`/pulls/${PR}/merge`, { method: "PUT", body: JSON.stringify({ merge_method: "squash", sha: head }) });
 await api(`/git/refs/heads/${pr.head.ref}`, { method: "DELETE" }).catch(() => {});
+await publishChangelog().catch((e) => console.log(`changelog failed (merge kept): ${e.message}`));
 // Merges made with GITHUB_TOKEN don't trigger push workflows: dispatch the deploy explicitly
 await api(`/actions/workflows/deploy.yml/dispatches`, { method: "POST", body: JSON.stringify({ ref: "main" }) });
 console.log(`merged PR ${PR} at ${head.slice(0, 7)} and dispatched deploy`);
+
+// ---- Changelog: one GitHub Release per merged PR + a line in CHANGELOG.md ----
+async function publishChangelog() {
+  const section = (name) => ((new RegExp(`##\\s*${name}\\s*\\n([\\s\\S]*?)(?=\\n##\\s|$)`).exec(pr.body || "") || [])[1] || "").replace(/<!--[\s\S]*?-->/g, "").trim();
+  const issue = (/Closes\s+#(\d+)/i.exec(pr.body || "") || [])[1];
+  const lock = sensitive.length ? "🔒 " : "";
+  const proof = (await all(`/issues/${PR}/comments`)).filter((c) => c.body?.startsWith("<!-- pr-proof -->")).at(-1)?.body.replace("<!-- pr-proof -->", "").trim() || "_no proof comment_";
+  let body = `${section("Summary") || pr.title}\n\n`;
+  if (section("Decisions")) body += `### Decisions\n${section("Decisions")}\n\n`;
+  if (sensitive.length) body += `### 🔒 Security-sensitive\nTouched: ${sensitive.map((f) => `\`${f}\``).join(", ")}\n\n`;
+  body += `PR #${PR}${issue ? ` · closes #${issue}` : ""} · commit \`${head.slice(0, 7)}\`\n\n---\n${proof}\n`;
+  const rel = await api(`/releases`, { method: "POST", body: JSON.stringify({ tag_name: `pr-${PR}`, target_commitish: "main", name: `${lock}${pr.title}`, body }) });
+  const date = new Date().toISOString().slice(0, 10);
+  const line = `- ${date} · ${lock}**${pr.title}** ([#${PR}](https://github.com/${R}/pull/${PR}) · [release with GIF/screens](${rel?.html_url || `https://github.com/${R}/releases/tag/pr-${PR}`}))`;
+  const cur = await api(`/contents/CHANGELOG.md?ref=main`).catch(() => null);
+  const text = cur ? Buffer.from(cur.content, "base64").toString("utf8") : "# Changelog\n\nOne line per merged PR (newest first). Each links to a release with the verify GIF and screenshots.\n\n";
+  const [headTxt, ...rest] = text.split(/\n(?=- )/);
+  const next = `${headTxt.trimEnd()}\n\n${line}\n${rest.length ? rest.join("\n") : ""}`.replace(/\n{3,}/g, "\n\n");
+  await api(`/contents/CHANGELOG.md`, { method: "PUT", body: JSON.stringify({ message: `changelog: #${PR} ${pr.title}`, content: Buffer.from(next).toString("base64"), sha: cur?.sha, branch: "main" }) });
+}
