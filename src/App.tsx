@@ -816,7 +816,8 @@ function Calendar({ data, videos, open }: { data: Data; videos: Video[]; open: (
   const toggleSide = () => setSide((o) => { try { localStorage.setItem("vp-cal-side", o ? "0" : "1"); } catch {} return !o; });
   const [sideOver, setSideOver] = useState(false);
   const order = data.boot?.statuses || [];
-  const unscheduled = useMemo(() => videos.filter((v) => !v.publish_date && v.status !== "Cancelados").sort((a, b) => order.indexOf(b.status) - order.indexOf(a.status) || a.title.localeCompare(b.title)), [videos, order]);
+  // kanban order: columns left→right, then top→bottom inside each column
+  const unscheduled = useMemo(() => videos.filter((v) => !v.publish_date && v.status !== "Cancelados").sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status) || a.position - b.position), [videos, order]);
   const unschedule = async (e: React.DragEvent) => {
     e.preventDefault(); setSideOver(false);
     const id = e.dataTransfer.getData("text/plain"); const v = videos.find((x) => x.id === id);
@@ -872,7 +873,6 @@ function Calendar({ data, videos, open }: { data: Data; videos: Video[]; open: (
           <span className="eb">{t("Sem data")} · <span className="mono">{unscheduled.length}</span></span>
           <button className="x" aria-label={t("Fechar")} onClick={toggleSide}>×</button>
         </div>
-        <p className="cal-side-hint">{t("Arraste pro calendário pra agendar. Arraste um vídeo do calendário pra cá pra tirar a data.")}</p>
         <div className="cal-side-list">
           {unscheduled.length === 0 && <p className="cal-side-empty">{t("Todos os vídeos têm data.")}</p>}
           {unscheduled.map((v) => (

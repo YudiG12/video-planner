@@ -359,6 +359,11 @@ const calSide = async (pg, shots) => {
     await pg.goto(`${BASE}/calendario`, { waitUntil: "networkidle" }); await pg.waitForTimeout(400);
     assert(await pg.locator("#cal-side").count() === 0, "panel open by default");
     await pg.locator(".side-toggle").click();
+    const order = (await api("/api/bootstrap")).body.statuses, all = (await api("/api/videos")).body;
+    const want = all.filter((v) => !v.publish_date && v.status !== "Cancelados").sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status) || a.position - b.position).map((v) => v.id);
+    await pg.locator("#cal-side .chip").first().waitFor({ timeout: 5000 });
+    const got = await pg.locator("#cal-side .chip").evaluateAll((els) => els.map((e) => e.dataset.id));
+    assert(JSON.stringify(got) === JSON.stringify(want), `panel order ${got.length} items differs from kanban order`);
     const chip = pg.locator(`#cal-side .chip[data-id="${id}"]`); await chip.waitFor({ timeout: 5000 });
     if (shots) await pg.screenshot({ path: `${OUT}/calendar-side.png` });
     const day = pg.locator(".day.today"); await day.scrollIntoViewIfNeeded();
@@ -374,7 +379,7 @@ const calSide = async (pg, shots) => {
     await pg.reload({ waitUntil: "networkidle" }); assert(await pg.locator("#cal-side").count() === 1, "panel state not remembered");
   } finally { await api(`/api/videos/${id}`, { method: "DELETE" }); }
 };
-await check("ui: calendar side panel lists videos with no date; drag in schedules, drag out clears the date", () => calSide(page, true));
+await check("ui: calendar side panel lists videos with no date in kanban order; drag in schedules, drag out clears the date", () => calSide(page, true));
 await check("ui: record calendar side panel (calendar-side.gif)", async () => {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, recordVideo: { dir: `${OUT}/video-side`, size: { width: 1280, height: 800 } } });
   await offline(ctx); const p = await ctx.newPage();

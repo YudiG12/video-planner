@@ -27,7 +27,6 @@ const EN: Record<string, string> = {
   "Abrir em tela cheia": "Open full screen", "Fechar": "Close", "Opções": "Options", "Abrir detalhes": "Open details",
   "Apagar ideia": "Delete idea", "Apagar roteiro": "Delete script", "Apagar": "Delete", "Cancelar": "Cancel", "Não dá pra desfazer.": "This can't be undone.",
   "Hoje": "Today", "hoje": "today", "Sem data": "No date", "Todos os vídeos têm data.": "Every video has a date.",
-  "Arraste pro calendário pra agendar. Arraste um vídeo do calendário pra cá pra tirar a data.": "Drag onto the calendar to schedule. Drag a video from the calendar here to clear its date.",
   "Vídeo longo publicado": "Published video", "Publicado": "Published", "Falta": "Missing", "pend.": "left", "ok": "ok",
   "Nenhum vídeo longo finalizado ainda.": "No published videos yet.",
   "2 cortes IG": "2 IG clips", "Shorts": "Shorts", "TikTok": "TikTok", "2 posts LinkedIn": "2 LinkedIn posts", "Journal": "Article", "Reels": "Reels",
