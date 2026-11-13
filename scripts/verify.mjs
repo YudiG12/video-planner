@@ -151,6 +151,16 @@ const pctx = await browser.newContext({ viewport: { width: 1440, height: 900 } }
 await offline(pctx);
 const page = await pctx.newPage();
 const errors = []; page.on("pageerror", (e) => errors.push(e.message)); page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
+await check("ui: browser tab icon (favicon.svg + apple-touch-icon.png) is linked and served", async () => {
+  await page.goto(`${BASE}/kanban`, { waitUntil: "networkidle" });
+  for (const sel of ['link[rel="icon"]', 'link[rel="apple-touch-icon"]']) {
+    const href = await page.locator(sel).getAttribute("href"); assert(href, `${sel} missing`);
+    const r = await fetch(BASE + href); assert(r.ok && /svg|png/.test(r.headers.get("content-type") || ""), `${href} → ${r.status} ${r.headers.get("content-type")}`);
+  }
+  const ip = await browser.newPage({ viewport: { width: 220, height: 120 } });
+  await ip.setContent(`<div style="display:flex;gap:20px;padding:20px;background:#E3E8ED"><img src="${BASE}/favicon.svg" width="32" height="32"><img src="${BASE}/apple-touch-icon.png" width="80" height="80"></div>`);
+  await ip.waitForTimeout(300); await ip.screenshot({ path: `${OUT}/favicon.png` }); await ip.close();
+});
 for (const v of ["kanban", "calendario", "derivados", "ideias"]) {
   await check(`ui: ${v} renders`, async () => {
     await page.goto(`${BASE}/${v}`, { waitUntil: "networkidle" });
