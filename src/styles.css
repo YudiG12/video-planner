@@ -402,3 +402,10 @@ select,input[type=date]{border:1px solid var(--line);border-radius:var(--r);padd
 .cal-side-list{flex:1;overflow:auto;padding:4px 16px 16px;display:flex;flex-direction:column;gap:8px}
 .cal-side-empty{font-size:13px;color:var(--ink-muted);margin:8px 0}
 @media (max-width:720px){.cal-side{position:fixed;right:0;top:0;bottom:0;z-index:20;width:min(86vw,300px)}}
+.side-group{display:flex;flex-direction:column;gap:6px}
+.side-group-h{font-family:"Oxanium";font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-subtle);display:flex;gap:6px;padding-top:6px}
+.side-group-list{display:flex;flex-direction:column;gap:8px;min-height:24px}
+.side-slot{height:3px;border-radius:2px;background:var(--focus,#3767A8)}
+.cal-side-list{gap:14px}
+.cal-side .chip.dragging{opacity:.4}
+.side-group-list:empty{border:1px dashed var(--line-strong);border-radius:var(--r);min-height:28px}

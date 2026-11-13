@@ -380,6 +380,34 @@ const calSide = async (pg, shots) => {
   } finally { await api(`/api/videos/${id}`, { method: "DELETE" }); }
 };
 await check("ui: calendar side panel lists videos with no date in kanban order; drag in schedules, drag out clears the date", () => calSide(page, true));
+await check("ui: reordering in the calendar side panel changes the kanban order too (and another group = another status)", async () => {
+  const statuses = (await api("/api/bootstrap")).body.statuses.filter((x) => x !== "Cancelados");
+  const [st, st2] = statuses;
+  const mk = async (title) => (await api("/api/videos", { method: "POST", body: JSON.stringify({ title, format: "longo", status: st }) })).body.id;
+  const a = await mk("Side order A"), b = await mk("Side order B");
+  try {
+    await page.goto(`${BASE}/calendario`, { waitUntil: "networkidle" });
+    if (!(await page.locator("#cal-side").count())) await page.locator(".side-toggle").click();
+    const grp = page.locator(`#cal-side .side-group[data-st="${st}"] .side-group-list`);
+    const ids = () => grp.locator(".chip").evaluateAll((els) => els.map((e) => e.dataset.id));
+    await grp.locator(`.chip[data-id="${b}"]`).waitFor({ timeout: 5000 });
+    let before = await ids(); assert(before.indexOf(a) < before.indexOf(b), `start order ${before}`);
+    await grp.locator(`.chip[data-id="${b}"]`).dragTo(grp.locator(`.chip[data-id="${a}"]`), { targetPosition: { x: 20, y: 4 } });
+    await page.waitForTimeout(700);
+    const after = await ids(); assert(after.indexOf(b) < after.indexOf(a), `panel after: B should be above A`);
+    const vs = (await api("/api/videos")).body, pa = vs.find((v) => v.id === a), pb = vs.find((v) => v.id === b);
+    assert(pb.position < pa.position && pb.status === st, `api positions A=${pa.position} B=${pb.position}`);
+    await page.goto(`${BASE}/kanban`, { waitUntil: "networkidle" });
+    const board = await page.locator(".card").evaluateAll((els) => els.map((e) => e.textContent || ""));
+    assert(board.findIndex((x) => x.includes("Side order B")) < board.findIndex((x) => x.includes("Side order A")), "kanban still shows A above B");
+    await page.goto(`${BASE}/calendario`, { waitUntil: "networkidle" });
+    const g2 = page.locator(`#cal-side .side-group[data-st="${st2}"] .side-group-list`);
+    await page.locator(`#cal-side .chip[data-id="${a}"]`).dragTo(g2);
+    await page.waitForTimeout(700);
+    assert((await api(`/api/videos/${a}`)).body.status === st2, "status did not change when dropped in another group");
+    await page.screenshot({ path: `${OUT}/calendar-side-reorder.png` });
+  } finally { for (const id of [a, b]) await api(`/api/videos/${id}`, { method: "DELETE" }); }
+});
 await check("ui: record calendar side panel (calendar-side.gif)", async () => {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, recordVideo: { dir: `${OUT}/video-side`, size: { width: 1280, height: 800 } } });
   await offline(ctx); const p = await ctx.newPage();

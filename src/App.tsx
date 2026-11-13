@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, Fragment } from "react";
 import { api, CLIENT_ID, type Boot, type Format, type LiveMessage, type Series, type Video } from "./api";
 import * as I from "./icons";
 import { t, tAction, dateLocale, weekdays, setLocale } from "./i18n";
@@ -818,10 +818,31 @@ function Calendar({ data, videos, open }: { data: Data; videos: Video[]; open: (
   const order = data.boot?.statuses || [];
   // kanban order: columns left→right, then top→bottom inside each column
   const unscheduled = useMemo(() => videos.filter((v) => !v.publish_date && v.status !== "Cancelados").sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status) || a.position - b.position), [videos, order]);
+  // drop on the panel: clears the date (if any) and places the card at the slot, like the kanban
+  // (same status column + position, so the board order changes too; another group = another status)
+  const [sideDrag, setSideDrag] = useState<string | null>(null);
+  const [sideSlot, setSideSlot] = useState<{ st: string; i: number } | null>(null);
+  const groups = useMemo(() => order.filter((st) => st !== "Cancelados").map((st) => ({ st, items: unscheduled.filter((v) => v.status === st) })), [order, unscheduled]);
+  const sideSlotAt = (st: string, e: React.DragEvent) => {
+    const cards = Array.from((e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>(":scope > .chip")).filter((c) => c.dataset.id !== sideDrag);
+    let i = cards.findIndex((c) => { const r = c.getBoundingClientRect(); return e.clientY < r.top + r.height / 2; });
+    if (i < 0) i = cards.length;
+    if (!sideSlot || sideSlot.st !== st || sideSlot.i !== i) setSideSlot({ st, i });
+  };
   const unschedule = async (e: React.DragEvent) => {
     e.preventDefault(); setSideOver(false);
     const id = e.dataTransfer.getData("text/plain"); const v = videos.find((x) => x.id === id);
-    if (v?.publish_date) await data.patch(id, { publish_date: null });
+    const slot = sideSlot; setSideSlot(null); setSideDrag(null);
+    if (!v) return;
+    if (v.publish_date) await data.patch(id, { publish_date: null });
+    if (!slot) return;
+    const list = unscheduled.filter((x) => x.status === slot.st && x.id !== id);
+    const prev = list[slot.i - 1]?.position, next = list[slot.i]?.position;
+    const was = unscheduled.filter((x) => x.status === slot.st).findIndex((x) => x.id === id);
+    if (was >= 0 && was === slot.i) return; // dropped where it was
+    const position = prev == null && next == null ? v.position : prev == null ? next! - 1 : next == null ? prev + 1 : (prev + next) / 2;
+    data.setVideos((vs) => vs.map((x) => (x.id === id ? { ...x, status: slot.st, position, publish_date: null } : x)).sort((a, b) => a.position - b.position));
+    await api.move(id, slot.st, position); data.reload();
   };
   const label = (d: Date) => d.toLocaleDateString(dateLocale(), { month: "long", year: "numeric" }).replace(/^./, (c) => c.toUpperCase()).replace(" de ", " ");
   return (
@@ -875,12 +896,29 @@ function Calendar({ data, videos, open }: { data: Data; videos: Video[]; open: (
         </div>
         <div className="cal-side-list">
           {unscheduled.length === 0 && <p className="cal-side-empty">{t("Todos os vídeos têm data.")}</p>}
-          {unscheduled.map((v) => (
-            <div key={v.id} className={"chip" + (v.format === "vertical" ? " ig" : "")} data-id={v.id} draggable onDragStart={(e) => { e.dataTransfer.setData("text/plain", v.id); e.dataTransfer.effectAllowed = "move"; }} onClick={() => open(v.id)}>
-              <span className="chip-t">{v.title}</span>
-              <CardMeta data={data} v={v} small />
-            </div>
-          ))}
+          {groups.map(({ st, items }) => {
+            const shown = items.filter((v) => v.id !== sideDrag); let j = 0; // j = index among the cards that aren't being dragged
+            const slotHere = sideSlot?.st === st ? sideSlot.i : -1;
+            return (
+              <section key={st} className="side-group" data-st={st}>
+                <div className="side-group-h">{t(st)} <span className="mono">{items.length}</span></div>
+                <div className="side-group-list" onDragOver={(e) => { e.preventDefault(); sideSlotAt(st, e); }}>
+                  {items.map((v) => { const i = v.id === sideDrag ? -1 : j++; return (
+                    <Fragment key={v.id}>
+                      {slotHere === i && <div className="side-slot" />}
+                      <div className={"chip" + (v.format === "vertical" ? " ig" : "") + (v.id === sideDrag ? " dragging" : "")} data-id={v.id} draggable
+                        onDragStart={(e) => { e.dataTransfer.setData("text/plain", v.id); e.dataTransfer.effectAllowed = "move"; setTimeout(() => setSideDrag(v.id), 0); }}
+                        onDragEnd={() => { setSideDrag(null); setSideSlot(null); }} onClick={() => open(v.id)}>
+                        <span className="chip-t">{v.title}</span>
+                        <CardMeta data={data} v={v} small />
+                      </div>
+                    </Fragment>
+                  ); })}
+                  {slotHere === shown.length && <div className="side-slot" />}
+                </div>
+              </section>
+            );
+          })}
         </div>
       </aside>
     )}
