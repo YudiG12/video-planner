@@ -3,6 +3,7 @@ on:
   push: { branches: [main] }
   workflow_dispatch:
 concurrency: deploy
+permissions: { contents: read, issues: write }
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -16,5 +17,41 @@ jobs:
         with: { node-version: 22, cache: npm }
       - run: npm ci
       - run: sed -i "s/REPLACE_WITH_YOUR_D1_ID/${{ secrets.D1_DATABASE_ID }}/" wrangler.jsonc wrangler.agent.jsonc
+      # Creates queues/buckets that wrangler.jsonc names but don't exist yet (a new binding can't break the deploy).
+      - run: node scripts/provision.mjs
       - run: npm run db:migrate
-      - run: npm run deploy
+      - id: deploy
+        run: |
+          set -o pipefail  # without it, tee hides a failed deploy
+          npm run deploy 2>&1 | tee deploy.log
+          echo "app=$(grep -oE 'https://video-planner\.[a-z0-9-]+\.workers\.dev' deploy.log | head -1)" >> "$GITHUB_OUTPUT"
+          echo "agent=$(grep -oE 'https://video-planner-agent\.[a-z0-9-]+\.workers\.dev' deploy.log | head -1)" >> "$GITHUB_OUTPUT"
+      # Smoke test on production: the agent Worker's bindings work, and the app is still behind Cloudflare Access.
+      - name: Production health
+        run: |
+          app="${{ steps.deploy.outputs.app }}"; agent="${{ steps.deploy.outputs.agent }}"
+          [ -n "$app" ] && [ -n "$agent" ] || { echo "workers.dev URLs not found in the deploy output"; exit 1; }
+          ok=""
+          for i in 1 2 3 4 5; do
+            body=$(curl -fsS "$agent/health") && echo "$body" | grep -q '"db":true' && { echo "$body"; ok=1; break; }
+            sleep 6
+          done
+          [ -n "$ok" ] || { echo "agent health failed: $(curl -sS "$agent/health")"; exit 1; }
+          loc=$(curl -sS -o /dev/null -w '%{redirect_url}' "$app/")
+          echo "$loc" | grep -q 'cloudflareaccess.com' || { echo "app is NOT behind Access (redirect: $loc)"; exit 1; }
+          echo "app behind Access: ok"
+      # A failed deploy becomes work for the builder (label deploy-failed, taken before the queue) and blocks auto-merge.
+      - name: Open a deploy-failed issue
+        if: failure()
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          run="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          open=$(gh issue list --label deploy-failed --state open --json number -q '.[0].number')
+          if [ -n "$open" ]; then gh issue comment "$open" --body "Deploy failed again at ${GITHUB_SHA::7}: $run"; exit 0; fi
+          gh issue create --label agent --label deploy-failed --title "Fix the failing production deploy" --body "$(printf '%s\n' \
+            '## What' "The deploy of \`main\` at ${GITHUB_SHA::7} failed: $run" \
+            'Read the failed step log (`gh run view --log-failed`), fix the cause in the repo (config, provisioning, code) and make the deploy green.' \
+            'Auto-merge is blocked for every other PR until a deploy of `main` succeeds.' \
+            '## Done when…' '- [ ] the deploy workflow on main is green, including "Production health"' \
+            '- [ ] the cause is covered (provision step, verify check or AGENTS.md rule) so it cannot happen again' \
+            '## Out of scope' 'Unrelated features.')"

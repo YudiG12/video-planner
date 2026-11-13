@@ -52,6 +52,7 @@ const mcp = (name, args) => api("/mcp", { method: "POST", body: JSON.stringify({
 
 // ---- API / MCP feature checks ----
 let firstId;
+await check("api: agent worker /health reports db, live and agent_token without auth", async () => { const r = await fetch(AGENT + "/health"); const b = await r.json(); assert(r.status === 200 && b.ok && b.db && b.live && b.agent_token, JSON.stringify(b)); });
 await check("api: bootstrap returns series and statuses", async () => {
   const { status, body } = await api("/api/bootstrap");
   assert(status === 200 && body.series.length > 0 && body.statuses.length > 0, `status ${status}`);
