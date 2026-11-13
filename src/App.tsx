@@ -253,7 +253,7 @@ export default function App() {
         if (openId && !(e.target as HTMLElement).closest(".panel, .card, .chip, .idea, .drow .link")) setOpenId(null);
       }}>
         {view === "kanban" && <Kanban data={data} videos={shown} openId={openId} setOpenId={setOpenId} closing={closing} />}
-        {view === "calendario" && <Calendar data={data} videos={shown} open={setOpenId} />}
+        {view === "calendario" && <Calendar data={data} videos={shown} open={setOpenId} detailsOpen={!!openId} closeDetails={() => setOpenId(null)} />}
         {view === "derivados" && <Derivados data={data} open={setOpenId} />}
         {view === "ideias" && <Ideias data={data} filter={filter} open={(id) => { setOpenId(id); }} />}
         {openId && view !== "kanban" && <Panel data={data} id={openId} closing={closing} close={() => setOpenId(null)} />}
@@ -823,7 +823,7 @@ function fmtWhen(at: string) {
 }
 
 // ---------- calendar ----------
-function Calendar({ data, videos, open }: { data: Data; videos: Video[]; open: (id: string) => void }) {
+function Calendar({ data, videos, open, detailsOpen, closeDetails }: { data: Data; videos: Video[]; open: (id: string) => void; detailsOpen?: boolean; closeDetails?: () => void }) {
   const now = new Date();
   const [range, setRange] = useState({ from: -3, to: 6 }); // months relative to the current one
   const [over, setOver] = useState<string | null>(null);
@@ -853,7 +853,9 @@ function Calendar({ data, videos, open }: { data: Data; videos: Video[]; open: (
   };
   // side panel: videos with no publish date; drag in to schedule, drag a chip onto it to unschedule
   const [side, setSide] = useState(() => { try { return localStorage.getItem("vp-cal-side") === "1"; } catch { return false; } });
-  const toggleSide = () => setSide((o) => { try { localStorage.setItem("vp-cal-side", o ? "0" : "1"); } catch {} return !o; });
+  // with details open the panel is hidden: the button then closes the details and shows the panel
+  const toggleSide = () => { if (detailsOpen && side) { closeDetails?.(); return; } if (detailsOpen) closeDetails?.(); toggleSideRaw(); };
+  const toggleSideRaw = () => setSide((o) => { try { localStorage.setItem("vp-cal-side", o ? "0" : "1"); } catch {} return !o; });
   const [sideOver, setSideOver] = useState(false);
   const order = data.boot?.statuses || [];
   // kanban order: columns left→right, then top→bottom inside each column
@@ -898,7 +900,7 @@ function Calendar({ data, videos, open }: { data: Data; videos: Video[]; open: (
       <div className="cal-top">
         <div className="grid dows">{weekdays().map((d) => <div className="dow" key={d}>{d}</div>)}</div>
         <div className="filters"><button onClick={() => box.current?.querySelector(".mon.cur")?.scrollIntoView({ behavior: "smooth", block: "start" })}>{t("Hoje")}</button>
-          <button className={"side-toggle" + (side ? " on" : "")} aria-expanded={side} aria-controls="cal-side" onClick={toggleSide}>{t("Sem data")} <span className="mono">{unscheduled.length}</span></button></div>
+          <button className={"side-toggle" + (side && !detailsOpen ? " on" : "")} aria-expanded={side && !detailsOpen} aria-controls="cal-side" onClick={toggleSide}>{t("Sem data")} <span className="mono">{unscheduled.length}</span></button></div>
       </div>
       <div ref={top} style={{ height: 1 }} />
       <div className="grid">
@@ -928,7 +930,8 @@ function Calendar({ data, videos, open }: { data: Data; videos: Video[]; open: (
       </div>
       <div ref={bot} style={{ height: 1 }} />
     </div>
-    {side && (
+    {/* hidden while a video's details are open (too much on screen); comes back when they close */}
+    {side && !detailsOpen && (
       <aside id="cal-side" className={"cal-side" + (sideOver ? " drop" : "")}
         onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setSideOver(true); if (!(e.target as HTMLElement).closest(".side-group")) setSideSlot(null); }}
         onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setSideOver(false); }} onDrop={unschedule}>

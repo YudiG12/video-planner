@@ -464,6 +464,20 @@ await check("ui: reordering in the calendar side panel changes the kanban order 
     await page.screenshot({ path: `${OUT}/calendar-side-reorder.png` });
   } finally { for (const id of [a, b]) await api(`/api/videos/${id}`, { method: "DELETE" }); }
 });
+await check("ui: opening a video's details hides the No date panel; closing them brings it back", async () => {
+  await page.goto(`${BASE}/calendario`, { waitUntil: "networkidle" });
+  if (!(await page.locator("#cal-side").count())) await page.locator(".side-toggle").click();
+  await page.locator("#cal-side .chip").first().click();
+  await page.locator("aside.panel").waitFor({ timeout: 5000 });
+  assert(await page.locator("#cal-side").count() === 0, "No date panel still open next to the details");
+  await page.screenshot({ path: `${OUT}/calendar-details-open.png` });
+  await page.locator('aside.panel button[title="Close"], aside.panel button[title="Fechar"]').first().click();
+  await page.locator("#cal-side").waitFor({ timeout: 3000 });
+  await page.locator("#cal-side .chip").first().click(); await page.locator("aside.panel").waitFor({ timeout: 5000 });
+  await page.locator(".side-toggle").click(); // button while details are open: close details, show the list
+  await page.locator("#cal-side").waitFor({ timeout: 3000 });
+  await page.locator("aside.panel").waitFor({ state: "detached", timeout: 3000 });
+});
 await check("ui: record calendar side panel (calendar-side.gif)", async () => {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, recordVideo: { dir: `${OUT}/video-side`, size: { width: 1280, height: 800 } } });
   await offline(ctx); const p = await ctx.newPage();
