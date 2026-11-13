@@ -376,6 +376,25 @@ await check("live: a write through the app Worker (REST) reaches another open ta
   assert(Date.now() - t0 <= 2000, "took more than 2s");
   await p2.close();
 });
+await check("live: while the agent edits a block, the whole card shows it (kanban + calendar)", async () => {
+  await page.goto(`${BASE}/kanban`, { waitUntil: "networkidle" });
+  const card = page.locator(`.card[data-id="${liveId}"]`).first(); await card.waitFor({ timeout: 5000 });
+  mcpOut(await agentMcp("get_script_block", { id: liveId, block: "conteudo" }));
+  await card.locator(".card-badge").waitFor({ timeout: 2000 });
+  assert(/agent-editing/.test(await card.getAttribute("class")), "kanban card not marked");
+  await card.scrollIntoViewIfNeeded(); await page.screenshot({ path: `${OUT}/live-card-editing.png` });
+  const today = await page.evaluate(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; });
+  const before = (await api(`/api/videos/${liveId}`)).body.publish_date;
+  await api(`/api/videos/${liveId}`, { method: "PATCH", body: JSON.stringify({ publish_date: today }) });
+  try {
+    await page.goto(`${BASE}/calendario`, { waitUntil: "networkidle" });
+    const chip = page.locator(`.day .chip[data-id="${liveId}"]`); await chip.waitFor({ timeout: 5000 });
+    mcpOut(await agentMcp("get_script_block", { id: liveId, block: "conteudo" }));
+    await chip.locator(".card-badge").waitFor({ timeout: 2000 });
+    assert(/agent-editing/.test(await chip.getAttribute("class")), "calendar chip not marked");
+    await page.screenshot({ path: `${OUT}/live-calendar-editing.png` });
+  } finally { await api(`/api/videos/${liveId}`, { method: "PATCH", body: JSON.stringify({ publish_date: before }) }); }
+});
 await check("live: reduced motion turns the editing animation off", async () => {
   const anim = async (reducedMotion) => {
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion }); await offline(ctx);
