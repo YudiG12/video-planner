@@ -17,6 +17,9 @@ try { body = execFileSync("gh", ["pr", "view", pr, "--repo", repo, "--json", "bo
 const named = (/##\s*Cover\s*\n(?:<!--[\s\S]*?-->\s*)?`?([\w.-]+\.png)`?/i.exec(body) || [])[1];
 const cover = named && pngs.includes(named) ? named : pngs[0];
 if (cover) md += `![cover](${raw(cover)})\n\n`;
+// feature GIFs first (newest feature checks record their own), then the main flow
+const gifs = readdirSync("verify-out").filter((f) => f.endsWith(".gif") && !["flow.gif", "live.gif"].includes(f));
+for (const g of gifs) md += `### ${g.replace(".gif", "")}\n![${g}](${raw(g)})\n\n`;
 if (existsSync("verify-out/flow.gif")) md += `### Main flow\n![flow](${raw("flow.gif")})\n\n`;
 if (existsSync("verify-out/live.gif")) md += `### Live update (agent edits a block while the app is open)\n![live](${raw("live.gif")})\n\n`;
 md += `### Screens\n<table><tr>${pngs.map((f, i) => `${i && i % 2 === 0 ? "</tr><tr>" : ""}<td><b>${f.replace(".png", "")}</b><br><a href="${raw(f)}"><img src="${raw(f)}" width="420"></a></td>`).join("")}</tr></table>\n\n`;

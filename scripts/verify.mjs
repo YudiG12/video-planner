@@ -351,6 +351,38 @@ await check("ui: full-screen video page", async () => {
   await page.locator(".full-top").waitFor({ timeout: 5000 });
   await page.screenshot({ path: `${OUT}/video-full.png`, fullPage: true });
 });
+// Calendar side panel: unscheduled videos, drag in to schedule, drag back out to clear the date
+const calSide = async (pg, shots) => {
+  const c = await api("/api/videos", { method: "POST", body: JSON.stringify({ title: "Unscheduled verify video", format: "longo" }) }); const id = c.body.id;
+  try {
+    await pg.evaluate(() => { try { localStorage.removeItem("vp-cal-side"); } catch {} });
+    await pg.goto(`${BASE}/calendario`, { waitUntil: "networkidle" }); await pg.waitForTimeout(400);
+    assert(await pg.locator("#cal-side").count() === 0, "panel open by default");
+    await pg.locator(".side-toggle").click();
+    const chip = pg.locator(`#cal-side .chip[data-id="${id}"]`); await chip.waitFor({ timeout: 5000 });
+    if (shots) await pg.screenshot({ path: `${OUT}/calendar-side.png` });
+    const day = pg.locator(".day.today"); await day.scrollIntoViewIfNeeded();
+    await chip.dragTo(day); await pg.waitForTimeout(600);
+    const iso = await pg.evaluate(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; });
+    let g = await api(`/api/videos/${id}`); assert(g.body.publish_date === iso, `after drag-in: ${g.body.publish_date}, want ${iso}`);
+    await pg.locator(".day.today .chip", { hasText: "Unscheduled verify video" }).waitFor({ timeout: 3000 });
+    assert(await chip.count() === 0, "still listed in the panel after scheduling");
+    if (shots) await pg.screenshot({ path: `${OUT}/calendar-side-scheduled.png` });
+    await pg.locator(".day.today .chip", { hasText: "Unscheduled verify video" }).dragTo(pg.locator("#cal-side")); await pg.waitForTimeout(600);
+    g = await api(`/api/videos/${id}`); assert(g.body.publish_date === null, `after drag-out: ${g.body.publish_date}`);
+    await chip.waitFor({ timeout: 3000 });
+    await pg.reload({ waitUntil: "networkidle" }); assert(await pg.locator("#cal-side").count() === 1, "panel state not remembered");
+  } finally { await api(`/api/videos/${id}`, { method: "DELETE" }); }
+};
+await check("ui: calendar side panel lists videos with no date; drag in schedules, drag out clears the date", () => calSide(page, true));
+await check("ui: record calendar side panel (calendar-side.gif)", async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, recordVideo: { dir: `${OUT}/video-side`, size: { width: 1280, height: 800 } } });
+  await offline(ctx); const p = await ctx.newPage();
+  await p.goto(`${BASE}/calendario`, { waitUntil: "networkidle" });
+  await calSide(p, false); await p.waitForTimeout(800);
+  const vid = await p.video().path(); await ctx.close();
+  try { execSync(`ffmpeg -y -loglevel error -i ${vid} -vf "fps=8,scale=900:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse" ${OUT}/calendar-side.gif`); } catch { console.log("      (ffmpeg not found: kept webm only)"); }
+});
 // the conflict check above makes the browser log its expected 409 response; any other error still fails
 await check("ui: no console errors", async () => { const e = errors.filter((m) => !/status of 409 \(Conflict\)/.test(m)); assert(e.length === 0, e.slice(0, 3).join(" | ")); });
 // ---- GIF of the main flow (needs ffmpeg; skipped if missing) ----

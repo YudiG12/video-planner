@@ -811,8 +811,20 @@ function Calendar({ data, videos, open }: { data: Data; videos: Video[]; open: (
     e.preventDefault(); setOver(null);
     await data.patch(e.dataTransfer.getData("text/plain"), { publish_date: date });
   };
+  // side panel: videos with no publish date; drag in to schedule, drag a chip onto it to unschedule
+  const [side, setSide] = useState(() => { try { return localStorage.getItem("vp-cal-side") === "1"; } catch { return false; } });
+  const toggleSide = () => setSide((o) => { try { localStorage.setItem("vp-cal-side", o ? "0" : "1"); } catch {} return !o; });
+  const [sideOver, setSideOver] = useState(false);
+  const order = data.boot?.statuses || [];
+  const unscheduled = useMemo(() => videos.filter((v) => !v.publish_date && v.status !== "Cancelados").sort((a, b) => order.indexOf(b.status) - order.indexOf(a.status) || a.title.localeCompare(b.title)), [videos, order]);
+  const unschedule = async (e: React.DragEvent) => {
+    e.preventDefault(); setSideOver(false);
+    const id = e.dataTransfer.getData("text/plain"); const v = videos.find((x) => x.id === id);
+    if (v?.publish_date) await data.patch(id, { publish_date: null });
+  };
   const label = (d: Date) => d.toLocaleDateString(dateLocale(), { month: "long", year: "numeric" }).replace(/^./, (c) => c.toUpperCase()).replace(" de ", " ");
   return (
+    <div className="cal-wrap">
     <div className="cal" ref={box} onScroll={() => {
       // active month = the one in the middle of the screen
       const r = box.current!.getBoundingClientRect();
@@ -821,7 +833,8 @@ function Calendar({ data, videos, open }: { data: Data; videos: Video[]; open: (
     }}>
       <div className="cal-top">
         <div className="grid dows">{weekdays().map((d) => <div className="dow" key={d}>{d}</div>)}</div>
-        <div className="filters"><button onClick={() => box.current?.querySelector(".mon.cur")?.scrollIntoView({ behavior: "smooth", block: "start" })}>{t("Hoje")}</button></div>
+        <div className="filters"><button onClick={() => box.current?.querySelector(".mon.cur")?.scrollIntoView({ behavior: "smooth", block: "start" })}>{t("Hoje")}</button>
+          <button className={"side-toggle" + (side ? " on" : "")} aria-expanded={side} aria-controls="cal-side" onClick={toggleSide}>{t("Sem data")} <span className="mono">{unscheduled.length}</span></button></div>
       </div>
       <div ref={top} style={{ height: 1 }} />
       <div className="grid">
@@ -850,6 +863,27 @@ function Calendar({ data, videos, open }: { data: Data; videos: Video[]; open: (
         })()}
       </div>
       <div ref={bot} style={{ height: 1 }} />
+    </div>
+    {side && (
+      <aside id="cal-side" className={"cal-side" + (sideOver ? " drop" : "")}
+        onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setSideOver(true); }}
+        onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setSideOver(false); }} onDrop={unschedule}>
+        <div className="cal-side-h">
+          <span className="eb">{t("Sem data")} · <span className="mono">{unscheduled.length}</span></span>
+          <button className="x" aria-label={t("Fechar")} onClick={toggleSide}>×</button>
+        </div>
+        <p className="cal-side-hint">{t("Arraste pro calendário pra agendar. Arraste um vídeo do calendário pra cá pra tirar a data.")}</p>
+        <div className="cal-side-list">
+          {unscheduled.length === 0 && <p className="cal-side-empty">{t("Todos os vídeos têm data.")}</p>}
+          {unscheduled.map((v) => (
+            <div key={v.id} className={"chip" + (v.format === "vertical" ? " ig" : "")} data-id={v.id} draggable onDragStart={(e) => { e.dataTransfer.setData("text/plain", v.id); e.dataTransfer.effectAllowed = "move"; }} onClick={() => open(v.id)}>
+              <span className="chip-t">{v.title}</span>
+              <CardMeta data={data} v={v} small />
+            </div>
+          ))}
+        </div>
+      </aside>
+    )}
     </div>
   );
 }
