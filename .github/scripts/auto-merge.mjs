@@ -1,5 +1,6 @@
 // Pipeline decision for one PR: merge | circuit breaker. See AGENTS.md "Pipeline".
-// No human review: every PR merges on Codex PASS + green CI (security is guarded by the auth checks in verify).
+// No human review: every PR from a branch of this repo merges on Codex PASS + green CI (security is guarded by the
+// auth checks in verify). PRs from forks are held with needs-owner.
 // After merging it publishes a GitHub Release (summary + proof GIF/screens) and a CHANGELOG.md line.
 // Each Codex verdict is bound to the commit it reviewed; only the exact Codex bot identity counts.
 const { GITHUB_REPOSITORY: R, GH_TOKEN, PR, DRY_RUN } = process.env;
@@ -26,6 +27,13 @@ if (pr.state !== "open" || pr.draft) stop(`PR ${PR}: ${pr.state}${pr.draft ? " d
 const labels = pr.labels.map((l) => l.name);
 // manual brake only: the pipeline never adds needs-owner, but the owner can put it on a PR to hold it
 if (labels.includes("needs-owner") || labels.includes("circuit-breaker")) stop("held by label");
+// Public repo: anyone can open a PR from a fork. Only branches pushed to this repo (people with write access,
+// i.e. the owner and the builder routine) may auto-merge; anything else waits for the owner.
+if (pr.head.repo?.full_name !== R) {
+  await label("needs-owner").catch(() => {});
+  await comment("This PR comes from a fork, so it is never auto-merged. The owner will review it.").catch(() => {});
+  stop(`PR ${PR} from ${pr.head.repo?.full_name ?? "a deleted fork"}: held for the owner`);
+}
 const head = pr.head.sha;
 
 // Verdicts: one per Codex review/comment, each tied to the commit it names
