@@ -18,7 +18,7 @@ const named = (/##\s*Cover\s*\n(?:<!--[\s\S]*?-->\s*)?`?([\w.-]+\.png)`?/i.exec(
 const cover = named && pngs.includes(named) ? named : pngs[0];
 if (cover) md += `![cover](${raw(cover)})\n\n`;
 // feature GIFs first (newest feature checks record their own), then the main flow
-const gifs = readdirSync("verify-out").filter((f) => f.endsWith(".gif") && f !== "flow.gif");
+const gifs = readdirSync("verify-out").filter((f) => f.endsWith(".gif") && !["flow.gif", "live.gif"].includes(f));
 for (const g of gifs) md += `### ${g.replace(".gif", "")}\n![${g}](${raw(g)})\n\n`;
 if (existsSync("verify-out/flow.gif")) md += `### Main flow\n![flow](${raw("flow.gif")})\n\n`;
 if (existsSync("verify-out/live.gif")) md += `### Live update (agent edits a block while the app is open)\n![live](${raw("live.gif")})\n\n`;
