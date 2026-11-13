@@ -423,3 +423,8 @@ select,input[type=date]{border:1px solid var(--line);border-radius:var(--r);padd
 .meta-pop button.on{background:var(--bg-subtle);font-weight:700}
 .meta-pop .sw{width:26px;height:20px;flex-shrink:0;border:1px solid var(--line);border-radius:3px;display:grid;place-items:center;overflow:hidden}
 .meta-pop .sw img{max-width:24px;max-height:18px;object-fit:contain}
+/* the agent is editing something inside this video: the whole card/chip shows it (kanban, calendar, ideas) */
+.chip{position:relative}
+.card.agent-editing,.chip.agent-editing{border-color:rgba(90,75,209,.55)}
+.card-badge{top:6px;right:6px;font-size:10px;padding:1px 7px 1px 5px}
+.card.agent-editing .card-t,.chip.agent-editing .chip-t{padding-right:64px}

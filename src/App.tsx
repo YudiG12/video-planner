@@ -349,12 +349,17 @@ function Content({ sc, sp, set, ver, cf, lc, fp }: { sc: any; sp: any; set: (b: 
   );
 }
 
+// The agent is editing some block of this video right now (shown on the card itself: kanban, calendar, ideas)
+const agentEditing = (data: Data, id: string) => Object.entries(data.editing).some(([k, until]) => k.startsWith(id + ":") && until > Date.now());
+const CardBusy = ({ data, v }: { data: Data; v: Video }) => agentEditing(data, v.id)
+  ? <span className="agent-badge card-badge" role="status" aria-label={t("Claude está editando…")}><i /><i /><i />Claude</span> : null;
 function Card({ data, v, sel, onClick, noDrag }: { data: Data; v: Video; sel: boolean; onClick: () => void; noDrag?: boolean }) {
   return (
-    <div className={`card ${v.format === "vertical" ? "ig" : ""} ${sel ? "sel" : ""}`} draggable={!noDrag}
+    <div className={`card ${v.format === "vertical" ? "ig" : ""} ${sel ? "sel" : ""}${agentEditing(data, v.id) ? " agent-editing" : ""}`} data-id={v.id} draggable={!noDrag}
       onDragStart={(e) => { e.dataTransfer.setData("text/plain", v.id); e.dataTransfer.effectAllowed = "move"; window.dispatchEvent(new CustomEvent("vp-drag", { detail: v.id })); }}
       onDragEnd={() => window.dispatchEvent(new CustomEvent("vp-drag", { detail: null }))} onClick={onClick}>
-      {data.dots[v.id] && <span className="dot-changed" title={t("Alterado pelo Claude")} aria-label={t("Alterado pelo Claude")} />}
+      {data.dots[v.id] && !agentEditing(data, v.id) && <span className="dot-changed" title={t("Alterado pelo Claude")} aria-label={t("Alterado pelo Claude")} />}
+      <CardBusy data={data} v={v} />
       <span className="card-t">{v.title}</span>
       <CardMeta data={data} v={v} />
     </div>
@@ -917,7 +922,8 @@ function Calendar({ data, videos, open, detailsOpen, closeDetails }: { data: Dat
                 onDragOver={(e) => { e.preventDefault(); setOver(k); }} onDragLeave={() => setOver(null)} onDrop={(e) => drop(k, e)}>
                 <span className="n">{day === 1 ? <b className="mlabel">{label(d)}</b> : null}{k === today ? `${day} · ${t("hoje")}` : day}</span>
                 {(byDate[k] || []).map((v) => (
-                  <div key={v.id} className={"chip" + (v.format === "vertical" ? " ig" : "")} draggable onDragStart={(e) => e.dataTransfer.setData("text/plain", v.id)} onClick={() => open(v.id)}>
+                  <div key={v.id} className={"chip" + (v.format === "vertical" ? " ig" : "") + (agentEditing(data, v.id) ? " agent-editing" : "")} data-id={v.id} draggable onDragStart={(e) => e.dataTransfer.setData("text/plain", v.id)} onClick={() => open(v.id)}>
+                    <CardBusy data={data} v={v} />
                     <span className="chip-t">{v.title}</span>
                     <CardMeta data={data} v={v} small />
                   </div>
@@ -951,9 +957,10 @@ function Calendar({ data, videos, open, detailsOpen, closeDetails }: { data: Dat
                   {items.map((v) => { const i = v.id === sideDrag ? -1 : j++; return (
                     <Fragment key={v.id}>
                       {slotHere === i && <div className="side-slot" />}
-                      <div className={"chip" + (v.format === "vertical" ? " ig" : "") + (v.id === sideDrag ? " dragging" : "")} data-id={v.id} draggable
+                      <div className={"chip" + (v.format === "vertical" ? " ig" : "") + (v.id === sideDrag ? " dragging" : "") + (agentEditing(data, v.id) ? " agent-editing" : "")} data-id={v.id} draggable
                         onDragStart={(e) => { e.dataTransfer.setData("text/plain", v.id); e.dataTransfer.effectAllowed = "move"; setTimeout(() => setSideDrag(v.id), 0); }}
                         onDragEnd={() => { setSideDrag(null); setSideSlot(null); }} onClick={() => open(v.id)}>
+                        <CardBusy data={data} v={v} />
                         <span className="chip-t">{v.title}</span>
                         <CardMeta data={data} v={v} small />
                       </div>
