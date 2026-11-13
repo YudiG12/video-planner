@@ -409,3 +409,17 @@ select,input[type=date]{border:1px solid var(--line);border-radius:var(--r);padd
 .cal-side-list{gap:14px}
 .cal-side .chip.dragging{opacity:.4}
 .side-group-list:empty{border:1px dashed var(--line-strong);border-radius:var(--r);min-height:28px}
+
+/* video details: series / sponsor pickers */
+.meta-pick{position:relative}
+.meta-btn{border:1px solid transparent;background:none;padding:0;border-radius:var(--r);cursor:pointer;display:flex;font:inherit;color:inherit;text-align:left}
+.meta-btn:hover,.meta-btn[aria-expanded="true"]{border-color:var(--line-strong)}
+.meta-btn:focus-visible{outline:2px solid #3767A8;outline-offset:2px}
+.meta-btn > .meta{padding:6px 8px}
+.meta-empty{display:inline-flex;align-items:center;gap:8px;padding:7px 10px;border:1px dashed var(--line-strong);border-radius:var(--r);font-size:13px;font-weight:600;color:var(--ink-muted)}
+.meta-pop{position:absolute;left:0;top:calc(100% + 6px);z-index:30;background:#fff;border:1px solid var(--line-strong);border-radius:var(--r);padding:4px;min-width:220px;max-height:320px;overflow:auto;display:flex;flex-direction:column}
+.meta-pop button{display:flex;align-items:center;gap:10px;border:0;background:none;padding:7px 8px;border-radius:var(--r);font:inherit;font-size:13px;color:var(--ink-strong);cursor:pointer;text-align:left}
+.meta-pop button:hover{background:var(--bg-subtle)}
+.meta-pop button.on{background:var(--bg-subtle);font-weight:700}
+.meta-pop .sw{width:26px;height:20px;flex-shrink:0;border:1px solid var(--line);border-radius:3px;display:grid;place-items:center;overflow:hidden}
+.meta-pop .sw img{max-width:24px;max-height:18px;object-fit:contain}

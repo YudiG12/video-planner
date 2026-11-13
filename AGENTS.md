@@ -26,6 +26,7 @@ Builds the app, runs it on a throwaway local D1 with fake demo data (never produ
 | Derivatives checklist | `src/App.tsx` Derivados | ui: derivados |
 | Ideas by series (long-form first, series logo) | `src/App.tsx` Ideias | ui: ideias |
 | Video panel: script blocks, hook, series line, YT preview | `src/App.tsx` Panel/Script | ui: video panel |
+| Change series and sponsor from the video details (panel and full page): click the series chip / sponsor, pick from the list (Esc or click outside closes) | `Meta` in `src/App.tsx`, `.meta-pop` in `src/styles.css` | ui: video details let you change the series and the sponsor / `panel-series-sponsor.gif` |
 | REST API: videos CRUD, bootstrap | `worker/index.ts`, `worker/store.ts` | api: * |
 | Image assets (png/jpeg/webp/gif, 1.5 MB) | `saveAsset` in `worker/store.ts` | api: upload / rejects |
 | MCP tools (list/create/update/move videos, script blocks, upload_image) | `worker/mcp.ts` | mcp: * |
