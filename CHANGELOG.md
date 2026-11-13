@@ -2,6 +2,7 @@
 
 One line per merged PR (newest first). Each links to a release with the verify GIF and screenshots.
 
+- 2026-11-13 · **Cards show when the agent is editing that video** ([#23](https://github.com/YudiG12/video-planner/pull/23) · [release with GIF/screens](https://github.com/YudiG12/video-planner/releases/tag/pr-23))
 - 2026-11-13 · **Calendar: hide the No date list while a video's details are open** ([#22](https://github.com/YudiG12/video-planner/pull/22) · [release with GIF/screens](https://github.com/YudiG12/video-planner/releases/tag/pr-22))
 - 2026-11-13 · **Browser tab icon** ([#21](https://github.com/YudiG12/video-planner/pull/21) · [release with GIF/screens](https://github.com/YudiG12/video-planner/releases/tag/pr-21))
 - 2026-11-13 · **Video details: change series and sponsor from the panel** ([#20](https://github.com/YudiG12/video-planner/pull/20) · [release with GIF/screens](https://github.com/YudiG12/video-planner/releases/tag/pr-20))
