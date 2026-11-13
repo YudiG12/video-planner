@@ -388,3 +388,18 @@ select,input[type=date]{border:1px solid var(--line);border-radius:var(--r);padd
   .block,.ins{transition:none}
 }
 .rt-field{min-width:0}
+
+/* calendar: side panel with unscheduled videos */
+.cal-wrap{flex:1;display:flex;min-height:0;min-width:0}
+.cal-wrap .cal{min-width:0}
+.side-toggle{display:inline-flex;gap:6px;align-items:center}
+.side-toggle.on{background:var(--bg-subtle);border-color:var(--line-strong)}
+.cal-side{width:280px;flex-shrink:0;border-left:1px solid var(--line);background:#fff;display:flex;flex-direction:column;min-height:0}
+.cal-side.drop{background:var(--bg-subtle)}
+.cal-side-h{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 6px}
+.cal-side-h .eb{font-family:"Oxanium";font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-subtle)}
+.cal-side-h .x{border:0;background:none;font-size:20px;line-height:1;color:var(--ink-muted);cursor:pointer;padding:2px 6px}
+.cal-side-hint{margin:0;padding:0 16px 10px;font-size:12px;color:var(--ink-muted);line-height:1.45}
+.cal-side-list{flex:1;overflow:auto;padding:4px 16px 16px;display:flex;flex-direction:column;gap:8px}
+.cal-side-empty{font-size:13px;color:var(--ink-muted);margin:8px 0}
+@media (max-width:720px){.cal-side{position:fixed;right:0;top:0;bottom:0;z-index:20;width:min(86vw,300px)}}
