@@ -380,6 +380,47 @@ const calSide = async (pg, shots) => {
   } finally { await api(`/api/videos/${id}`, { method: "DELETE" }); }
 };
 await check("ui: calendar side panel lists videos with no date in kanban order; drag in schedules, drag out clears the date", () => calSide(page, true));
+await check("ui: reordering in the calendar side panel changes the kanban order too (and another group = another status)", async () => {
+  const statuses = (await api("/api/bootstrap")).body.statuses.filter((x) => x !== "Cancelados");
+  const [st, st2] = statuses;
+  const mk = async (title) => (await api("/api/videos", { method: "POST", body: JSON.stringify({ title, format: "longo", status: st }) })).body.id;
+  const a = await mk("Side order A"), b = await mk("Side order B");
+  try {
+    await page.goto(`${BASE}/calendario`, { waitUntil: "networkidle" });
+    if (!(await page.locator("#cal-side").count())) await page.locator(".side-toggle").click();
+    const grp = page.locator(`#cal-side .side-group[data-st="${st}"] .side-group-list`);
+    const ids = () => grp.locator(".chip").evaluateAll((els) => els.map((e) => e.dataset.id));
+    await grp.locator(`.chip[data-id="${b}"]`).waitFor({ timeout: 5000 });
+    let before = await ids(); assert(before.indexOf(a) < before.indexOf(b), `start order ${before}`);
+    await grp.locator(`.chip[data-id="${b}"]`).dragTo(grp.locator(`.chip[data-id="${a}"]`), { targetPosition: { x: 20, y: 4 } });
+    await page.waitForTimeout(700);
+    const after = await ids(); assert(after.indexOf(b) < after.indexOf(a), `panel after: B should be above A`);
+    const vs = (await api("/api/videos")).body, pa = vs.find((v) => v.id === a), pb = vs.find((v) => v.id === b);
+    assert(pb.position < pa.position && pb.status === st, `api positions A=${pa.position} B=${pb.position}`);
+    await page.goto(`${BASE}/kanban`, { waitUntil: "networkidle" });
+    const board = await page.locator(".card").evaluateAll((els) => els.map((e) => e.textContent || ""));
+    assert(board.findIndex((x) => x.includes("Side order B")) < board.findIndex((x) => x.includes("Side order A")), "kanban still shows A above B");
+    await page.goto(`${BASE}/calendario`, { waitUntil: "networkidle" });
+    const g2 = page.locator(`#cal-side .side-group[data-st="${st2}"] .side-group-list`);
+    await page.locator(`#cal-side .chip[data-id="${a}"]`).dragTo(g2);
+    await page.waitForTimeout(700);
+    assert((await api(`/api/videos/${a}`)).body.status === st2, "status did not change when dropped in another group");
+    // pass over one group's list, release on another group's heading: the heading's group wins (synthetic events: no scrolling races)
+    const st3 = statuses[2];
+    await page.evaluate(async ({ b, st2, st3 }) => {
+      const dt = new DataTransfer(), q = (sel) => document.querySelector(sel);
+      const fire = (el, type) => { const r = el.getBoundingClientRect(); el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt, clientX: r.left + 10, clientY: r.top + r.height / 2 })); };
+      const wait = () => new Promise((r) => setTimeout(r, 80));
+      fire(q(`#cal-side .chip[data-id="${b}"]`), "dragstart"); await wait();
+      fire(q(`#cal-side .side-group[data-st="${st2}"] .side-group-list`), "dragover"); await wait();
+      const h = q(`#cal-side .side-group[data-st="${st3}"] .side-group-h`);
+      fire(h, "dragover"); fire(h, "drop");
+    }, { b, st2, st3 });
+    await page.waitForTimeout(700);
+    const sb2 = (await api(`/api/videos/${b}`)).body.status; assert(sb2 === st3 || sb2 === st, `dropped on "${st3}" heading but status is "${sb2}" (the list it passed over)`); assert(sb2 === st3, `dropped on "${st3}" heading but status is "${sb2}"`);
+    await page.screenshot({ path: `${OUT}/calendar-side-reorder.png` });
+  } finally { for (const id of [a, b]) await api(`/api/videos/${id}`, { method: "DELETE" }); }
+});
 await check("ui: record calendar side panel (calendar-side.gif)", async () => {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, recordVideo: { dir: `${OUT}/video-side`, size: { width: 1280, height: 800 } } });
   await offline(ctx); const p = await ctx.newPage();
