@@ -405,6 +405,19 @@ await check("ui: reordering in the calendar side panel changes the kanban order 
     await page.locator(`#cal-side .chip[data-id="${a}"]`).dragTo(g2);
     await page.waitForTimeout(700);
     assert((await api(`/api/videos/${a}`)).body.status === st2, "status did not change when dropped in another group");
+    // pass over one group's list, release on another group's heading: the heading's group wins (synthetic events: no scrolling races)
+    const st3 = statuses[2];
+    await page.evaluate(async ({ b, st2, st3 }) => {
+      const dt = new DataTransfer(), q = (sel) => document.querySelector(sel);
+      const fire = (el, type) => { const r = el.getBoundingClientRect(); el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt, clientX: r.left + 10, clientY: r.top + r.height / 2 })); };
+      const wait = () => new Promise((r) => setTimeout(r, 80));
+      fire(q(`#cal-side .chip[data-id="${b}"]`), "dragstart"); await wait();
+      fire(q(`#cal-side .side-group[data-st="${st2}"] .side-group-list`), "dragover"); await wait();
+      const h = q(`#cal-side .side-group[data-st="${st3}"] .side-group-h`);
+      fire(h, "dragover"); fire(h, "drop");
+    }, { b, st2, st3 });
+    await page.waitForTimeout(700);
+    const sb2 = (await api(`/api/videos/${b}`)).body.status; assert(sb2 === st3 || sb2 === st, `dropped on "${st3}" heading but status is "${sb2}" (the list it passed over)`); assert(sb2 === st3, `dropped on "${st3}" heading but status is "${sb2}"`);
     await page.screenshot({ path: `${OUT}/calendar-side-reorder.png` });
   } finally { for (const id of [a, b]) await api(`/api/videos/${id}`, { method: "DELETE" }); }
 });
