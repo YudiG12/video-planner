@@ -20,6 +20,7 @@ Builds the app, runs it on a throwaway local D1 with fake demo data (never produ
 
 | Feature | Where | Checked by verify |
 |---|---|---|
+| Browser tab icon: `public/favicon.svg` (calendar + play) and `apple-touch-icon.png`, linked in `index.html` | `index.html`, `public/` | ui: browser tab icon… (`favicon.png`) |
 | Kanban (drag between statuses, Recent strip) | `src/App.tsx` Kanban | ui: kanban |
 | Calendar by publish date | `src/App.tsx` Calendar | ui: calendario |
 | Calendar side panel: videos with no date grouped by kanban status, in kanban order; drag to reorder (changes the board order) or into another group (changes status) ("No date" button, remembered open/closed); drag in to schedule, drag a calendar chip onto it to clear the date | `src/App.tsx` Calendar (`.cal-side`), `src/styles.css` | ui: calendar side panel… / ui: reordering in the calendar side panel… / `calendar-side.gif` |
