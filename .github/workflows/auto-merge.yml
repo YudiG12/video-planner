@@ -5,7 +5,7 @@ on:
   pull_request_review: { types: [submitted] }
   issue_comment: { types: [created] }
   workflow_run: { workflows: [CI], types: [completed] }
-permissions: { contents: write, pull-requests: write, issues: write, actions: write }
+permissions: { contents: write, pull-requests: write, issues: write, actions: write, checks: read, statuses: read }
 concurrency: { group: "auto-merge-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}" }
 jobs:
   decide:

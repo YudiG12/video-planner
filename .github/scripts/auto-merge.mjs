@@ -75,6 +75,11 @@ if (!latest?.pass) stop("no Codex PASS for head commit");
 
 await api(`/pulls/${PR}/merge`, { method: "PUT", body: JSON.stringify({ merge_method: "squash", sha: head }) });
 await api(`/git/refs/heads/${pr.head.ref}`, { method: "DELETE" }).catch(() => {});
+// Merges made with GITHUB_TOKEN don't auto-close the linked issues: close "Closes #N" explicitly
+for (const [, n] of (pr.body || "").matchAll(/\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)/gi)) {
+  await api(`/issues/${n}`, { method: "PATCH", body: JSON.stringify({ state: "closed", state_reason: "completed" }) }).catch((e) => console.log(`close #${n} failed: ${e.message}`));
+  await api(`/issues/${n}/comments`, { method: "POST", body: JSON.stringify({ body: `Done in #${PR}.` }) }).catch(() => {});
+}
 await publishChangelog().catch((e) => console.log(`changelog failed (merge kept): ${e.message}`));
 // Merges made with GITHUB_TOKEN don't trigger push workflows: dispatch the deploy explicitly
 await api(`/actions/workflows/deploy.yml/dispatches`, { method: "POST", body: JSON.stringify({ ref: "main" }) });
