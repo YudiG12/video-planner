@@ -26,7 +26,7 @@ const EN: Record<string, string> = {
   "Histórico": "History", "Você": "You", "Agente": "Agent", "Carregando…": "Loading…",
   "Abrir em tela cheia": "Open full screen", "Fechar": "Close", "Opções": "Options", "Abrir detalhes": "Open details",
   "Apagar ideia": "Delete idea", "Apagar roteiro": "Delete script", "Apagar": "Delete", "Cancelar": "Cancel", "Não dá pra desfazer.": "This can't be undone.",
-  "Hoje": "Today", "hoje": "today", "Sem data": "No date", "Todos os vídeos têm data.": "Every video has a date.",
+  "Trocar série": "Change series", "Trocar patrocinador": "Change sponsor", "Sem série": "No series", "Hoje": "Today", "hoje": "today", "Sem data": "No date", "Todos os vídeos têm data.": "Every video has a date.",
   "Vídeo longo publicado": "Published video", "Publicado": "Published", "Falta": "Missing", "pend.": "left", "ok": "ok",
   "Nenhum vídeo longo finalizado ainda.": "No published videos yet.",
   "2 cortes IG": "2 IG clips", "Shorts": "Shorts", "TikTok": "TikTok", "2 posts LinkedIn": "2 LinkedIn posts", "Journal": "Article", "Reels": "Reels",

@@ -464,21 +464,61 @@ function Panel({ data, id, close, closing }: { data: Data; id: string; close: ()
   );
 }
 
-function Meta({ data, v, big }: { data: Data; v: Video; big?: boolean }) {
+// Series + sponsor of a video, each a button that opens a list to change it (panel and full page)
+function Meta({ data, v }: { data: Data; v: Video; big?: boolean }) {
   const s = seriesOf(data.boot, v);
   const sp = sponsorOf(data.boot, v);
+  const [pop, setPop] = useState<"series" | "sponsor" | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!pop) return;
+    const out = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setPop(null); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setPop(null); };
+    window.addEventListener("mousedown", out); window.addEventListener("keydown", esc);
+    return () => { window.removeEventListener("mousedown", out); window.removeEventListener("keydown", esc); };
+  }, [pop]);
+  const pick = (patch: Partial<Video>) => { setPop(null); data.patch(v.id, patch); };
+  const seriesList = (data.boot?.series || []).filter((x) => x.format === v.format).sort((a, b) => a.position - b.position);
   return (
-    <div className="meta">
-      {s ? (
-        <div className="serie" style={{ background: s.bg, color: s.color }}>
-          {s.logo ? <img className="serie-logo" src={s.logo} alt="" /> : <div className="logo-ph" />}
-          {v.episode && s.format === "vertical" && <span className="ep">EP {v.episode}</span>}
-          <b>{s.name}</b>
-          {v.format === "longo" ? <I.YT w={17} /> : <I.IG s={15} />}
-        </div>
-      ) : v.format === "longo" ? <I.YT /> : <I.IG />}
-      {sp && <span className="meta">{sp.logo && <img className="logo" src={sp.logo} alt="" />}<b style={{ fontSize: 13, color: "var(--ink-strong)" }}>{sp.name}</b></span>}
-      {big && null}
+    <div className="meta meta-edit" ref={ref}>
+      <div className="meta-pick">
+        <button className="meta-btn" data-pick="series" aria-haspopup="listbox" aria-expanded={pop === "series"} title={t("Trocar série")} onClick={() => setPop(pop === "series" ? null : "series")}>
+          {s ? (
+            <div className="serie" style={{ background: s.bg, color: s.color }}>
+              {s.logo ? <img className="serie-logo" src={s.logo} alt="" /> : <div className="logo-ph" />}
+              {v.episode && s.format === "vertical" && <span className="ep">EP {v.episode}</span>}
+              <b>{s.name}</b>
+              {v.format === "longo" ? <I.YT w={17} /> : <I.IG s={15} />}
+            </div>
+          ) : <span className="meta-empty">{v.format === "longo" ? <I.YT /> : <I.IG />}{t("Sem série")}</span>}
+        </button>
+        {pop === "series" && (
+          <div className="meta-pop" role="listbox">
+            {seriesList.map((x) => (
+              <button key={x.id} role="option" aria-selected={x.id === v.series_id} className={x.id === v.series_id ? "on" : ""} onClick={() => pick({ series_id: x.id })}>
+                <span className="sw" style={{ background: x.bg, borderColor: x.color }}>{x.logo && <img src={x.logo} alt="" />}</span>{x.name}
+              </button>
+            ))}
+            <button role="option" aria-selected={!v.series_id} className={!v.series_id ? "on" : ""} onClick={() => pick({ series_id: null })}><span className="sw" />{t("Sem série")}</button>
+          </div>
+        )}
+      </div>
+      <div className="meta-pick">
+        <button className="meta-btn" data-pick="sponsor" aria-haspopup="listbox" aria-expanded={pop === "sponsor"} title={t("Trocar patrocinador")} onClick={() => setPop(pop === "sponsor" ? null : "sponsor")}>
+          {sp ? <span className="meta">{sp.logo && <img className="logo" src={sp.logo} alt="" />}<b style={{ fontSize: 13, color: "var(--ink-strong)" }}>{sp.name}</b></span>
+            : <span className="meta-empty">+ {t("Patrocinador")}</span>}
+        </button>
+        {pop === "sponsor" && (
+          <div className="meta-pop" role="listbox">
+            {(data.boot?.sponsors || []).map((x) => (
+              <button key={x.id} role="option" aria-selected={x.id === v.sponsor_id} className={x.id === v.sponsor_id ? "on" : ""} onClick={() => pick({ sponsor_id: x.id })}>
+                <span className="sw">{x.logo && <img src={x.logo} alt="" />}</span>{x.name}
+              </button>
+            ))}
+            <button role="option" aria-selected={!v.sponsor_id} className={!v.sponsor_id ? "on" : ""} onClick={() => pick({ sponsor_id: null })}><span className="sw" />{t("Sem publi")}</button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

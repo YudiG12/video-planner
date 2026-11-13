@@ -176,6 +176,39 @@ await check("mcp: update_series sets a logo that shows in the Ideas column", asy
 });
 await check("ui: video panel opens (click card)", async () => {
   await page.goto(`${BASE}/kanban`, { waitUntil: "networkidle" });
+const pickSeriesSponsor = async (pg, shots) => {
+  const boot = (await api("/api/bootstrap")).body;
+  const longSeries = boot.series.filter((x) => x.format === "longo");
+  assert(longSeries.length >= 2 && boot.sponsors.length >= 1, "demo data needs 2 long series and a sponsor");
+  const c = await api("/api/videos", { method: "POST", body: JSON.stringify({ title: "Pick series verify", format: "longo", series_id: longSeries[0].id }) }); const id = c.body.id;
+  try {
+    await pg.goto(`${BASE}/kanban`, { waitUntil: "networkidle" });
+    await pg.locator(".card", { hasText: "Pick series verify" }).first().click();
+    const panel = pg.locator("aside.panel");
+    await panel.locator('.meta-btn[data-pick="series"]').click();
+    if (shots) await pg.screenshot({ path: `${OUT}/panel-series-picker.png` });
+    await panel.locator(".meta-pop button", { hasText: longSeries[1].name }).click(); await pg.waitForTimeout(500);
+    let g = (await api(`/api/videos/${id}`)).body; assert(g.series_id === longSeries[1].id, `series_id ${g.series_id}`);
+    assert(await panel.locator('.meta-btn[data-pick="series"]', { hasText: longSeries[1].name }).count() === 1, "panel doesn't show the new series");
+    await panel.locator('.meta-btn[data-pick="sponsor"]').click();
+    await panel.locator(".meta-pop button", { hasText: boot.sponsors[0].name }).click(); await pg.waitForTimeout(500);
+    g = (await api(`/api/videos/${id}`)).body; assert(g.sponsor_id === boot.sponsors[0].id, `sponsor_id ${g.sponsor_id}`);
+    if (shots) await pg.screenshot({ path: `${OUT}/panel-series-sponsor.png` });
+    await panel.locator('.meta-btn[data-pick="sponsor"]').click();
+    await panel.locator(".meta-pop button", { hasText: /Sem publi|No sponsor/ }).click(); await pg.waitForTimeout(500);
+    g = (await api(`/api/videos/${id}`)).body; assert(g.sponsor_id === null, `sponsor not cleared: ${g.sponsor_id}`);
+    await panel.locator('.meta-btn[data-pick="series"]').click(); await pg.keyboard.press("Escape");
+    assert(await panel.locator(".meta-pop").count() === 0, "Escape doesn't close the list");
+  } finally { await api(`/api/videos/${id}`, { method: "DELETE" }); }
+};
+await check("ui: video details let you change the series and the sponsor", () => pickSeriesSponsor(page, true));
+await check("ui: record series/sponsor picker (panel-series-sponsor.gif)", async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, recordVideo: { dir: `${OUT}/video-meta`, size: { width: 1280, height: 800 } } });
+  await offline(ctx); const p = await ctx.newPage();
+  await pickSeriesSponsor(p, false); await p.waitForTimeout(600);
+  const vid = await p.video().path(); await ctx.close();
+  try { execSync(`ffmpeg -y -loglevel error -i ${vid} -vf "fps=8,scale=900:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse" ${OUT}/panel-series-sponsor.gif`); } catch { console.log("      (ffmpeg not found: kept webm only)"); }
+});
   await page.locator(".card", { hasText: "How a database index actually works" }).first().click();
   await page.locator(".serie-box").waitFor({ timeout: 5000 }); // long-form hook shows the series-line box
   assert(await page.locator("h3", { hasText: /Conte|Content/ }).count() > 0, "script blocks not visible");
