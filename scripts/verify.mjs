@@ -767,6 +767,22 @@ await check("ui: a failed create (500) removes the temporary card and shows an e
     await p.waitForTimeout(4300); assert(await p.locator(".toast-err").count() === 0, "error toast doesn't go away");
   } finally { await ctx.close(); }
 });
+await check("ui: a create that fails while an Undo toast is showing still shows its error (both toasts, no overlap)", async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } }); await offline(ctx);
+  const p = await ctx.newPage();
+  try {
+    await p.route("**/api/videos", async (r) => { if (r.request().method() !== "POST") return r.continue(); await new Promise((x) => setTimeout(x, 1000)); await r.fulfill({ status: 500, contentType: "application/json", body: '{"error":"boom"}' }); });
+    await p.goto(`${BASE}/kanban`, { waitUntil: "networkidle" });
+    await p.locator(".topbar .btn-dark").click();
+    // delete it right away: the Undo toast is up when the create fails
+    const panel = p.locator("aside.panel"); await panel.locator(".opts-btn").click(); await panel.locator(".opts-del").click(); await panel.locator(".btn-danger").click();
+    await p.locator(".toast-undo").waitFor({ timeout: 1000 });
+    await p.locator(".toast-err").waitFor({ timeout: 3000 });
+    const [u, e] = await Promise.all([p.locator(".toast:not(.toast-err)").boundingBox(), p.locator(".toast-err").boundingBox()]);
+    assert(u && e && e.y + e.height <= u.y, `toasts overlap: undo ${JSON.stringify(u)} error ${JSON.stringify(e)}`);
+    await p.screenshot({ path: `${OUT}/create-failed-with-undo.png` });
+  } finally { await ctx.close(); }
+});
 await check("ui: record motion (motion.gif)", async () => {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, recordVideo: { dir: `${OUT}/video-motion`, size: { width: 1280, height: 800 } } });
   await offline(ctx); const p = await ctx.newPage();

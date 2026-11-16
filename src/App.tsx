@@ -371,7 +371,8 @@ export default function App() {
           <button className="toast-undo" onClick={data.undoRemove}>{t("Desfazer")}</button>
         </div>
       )}
-      {data.error && !data.trash && <div className="toast toast-err" role="alert" key={data.error.n}>{data.error.msg}</div>}
+      {/* shown together with an Undo toast too (stacked above it), so a failure is never hidden */}
+      {data.error && <div className={"toast toast-err" + (data.trash ? " toast-up" : "")} role="alert" key={data.error.n}>{data.error.msg}</div>}
     </div>
   );
 }

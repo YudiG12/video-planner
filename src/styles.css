@@ -477,6 +477,7 @@ button:active:not(:disabled){transform:scale(.96)}
 .toast b{font-weight:600}
 .toast-undo{border:0;background:#fff;color:var(--ink-strong);font-weight:700;font-size:12px;padding:5px 10px;border-radius:var(--r)}
 .toast-err{background:#B3261E}
+.toast-up{bottom:calc(76px + env(safe-area-inset-bottom,0px))}
 @keyframes toast-in{from{opacity:0;transform:translate(-50%,10px)}}
 .confetti{position:fixed;width:6px;height:6px;border-radius:1px;pointer-events:none;z-index:80}
 .skel{border-radius:var(--r);background:linear-gradient(90deg,#EEF1F4 25%,#F7F9FA 50%,#EEF1F4 75%);background-size:200% 100%;animation:skel 1.2s linear infinite}
