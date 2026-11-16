@@ -20,6 +20,7 @@ Builds the app, runs it on a throwaway local D1 with fake demo data (never produ
 
 | Feature | Where | Checked by verify |
 |---|---|---|
+| Motion: 4 durations (120/200/320/600 ms), cards slide between columns/days/lists (FLIP), counters bump, confetti on Finalizado, derivative check draws in, "saved" tick per block, conflict shakes once, popovers/side panel/panel switch ease in, delete waits 5 s behind an Undo toast, skeleton while loading, reduced motion = no movement | `src/motion.tsx`, motion block at the end of `src/styles.css`, `removeLater`/`undoRemove`/`saved` in `useData` | motion: * / `motion.gif` |
 | Browser tab icon: `public/favicon.svg` (calendar + play) and `apple-touch-icon.png`, linked in `index.html` | `index.html`, `public/` | ui: browser tab icon… (`favicon.png`) |
 | Kanban (drag between statuses, Recent strip) | `src/App.tsx` Kanban | ui: kanban |
 | Calendar by publish date | `src/App.tsx` Calendar | ui: calendario |
