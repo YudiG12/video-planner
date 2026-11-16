@@ -27,21 +27,25 @@ function useData() {
     setConflictsState(cref.current);
   };
   const vref = useRef(videos); vref.current = videos;
+  const deleting = useRef<Set<string>>(new Set()); // deletes waiting behind Undo: refreshes must not bring them back
   const [saved, setSaved] = useState<Record<string, number>>({}); // own saves per block, to flash "saved"
   // Delete waits 5 s behind an "Undo" toast; the video disappears at once
   const [trash, setTrash] = useState<{ v: Video; timer: number } | null>(null);
+  const commit = (id: string) => api.remove(id).finally(() => { deleting.current.delete(id); reload(); });
   const removeLater = (v: Video) => {
-    if (trash) { window.clearTimeout(trash.timer); api.remove(trash.v.id); }
+    if (trash) { window.clearTimeout(trash.timer); commit(trash.v.id); }
+    deleting.current.add(v.id);
     setVideos((vs) => vs.filter((x) => x.id !== v.id));
-    const timer = window.setTimeout(() => { api.remove(v.id).then(() => reload()); setTrash(null); }, 5000);
+    const timer = window.setTimeout(() => { commit(v.id); setTrash(null); }, 5000);
     setTrash({ v, timer });
   };
-  const undoRemove = () => { if (!trash) return; window.clearTimeout(trash.timer); setVideos((vs) => [...vs, trash.v].sort((a, b) => a.position - b.position)); setTrash(null); };
+  // Undo: stop hiding it and re-read from the server (it was never deleted there), so it can't be duplicated
+  const undoRemove = () => { if (!trash) return; window.clearTimeout(trash.timer); deleting.current.delete(trash.v.id); setTrash(null); reload(); };
   const queue = useRef<Record<string, Promise<unknown>>>({});
   const advanced = useRef<Record<string, Record<number, number>>>({}); // own saves: base -> new version
   const pending = useRef<Record<string, number>>({}); // blocks with a save in flight: a re-read must not undo them
   // Server data replaces local data, except blocks this tab is still saving
-  const merge = (list: Video[]) => setVideos((local) => list.map((f) => {
+  const merge = (list: Video[]) => setVideos((local) => list.filter((f) => !deleting.current.has(f.id)).map((f) => {
     const l = local.find((x) => x.id === f.id);
     const keep = l ? Object.keys(pending.current).filter((k) => pending.current[k] > 0 && k.startsWith(f.id + ":")).map((k) => k.slice(f.id.length + 1)) : [];
     if (!l || !keep.length) return f;

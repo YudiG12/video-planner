@@ -528,9 +528,14 @@ const motion = async (pg, { shots = false } = {}) => {
     await pg.locator(".opts-del").click(); await pg.locator(".opts-confirm .btn-danger").click();
     await pg.locator(".toast").waitFor({ timeout: 2000 });
     assert(await pg.locator(`.card[data-flip="${id}"]`).count() === 0, "deleted card still on the board");
+    // a refresh during the Undo window (another video changes) must not bring it back
+    const other = await mk("Motion refresh trigger"); await pg.waitForTimeout(1500);
+    await api(`/api/videos/${other}`, { method: "DELETE" }); await pg.waitForTimeout(800);
+    assert(await pg.locator(`.card[data-flip="${id}"]`).count() === 0, "pending delete came back after a refresh");
     if (shots) await pg.screenshot({ path: `${OUT}/motion-undo-toast.png` });
     await pg.locator(".toast-undo").click();
     await pg.locator(`.card[data-flip="${id}"]`).waitFor({ timeout: 2000 });
+    assert(await pg.locator(`.card[data-flip="${id}"]`).count() === 1, "Undo duplicated the card");
     await pg.waitForTimeout(5500);
     assert((await api(`/api/videos/${id}`)).status === 200, "video was deleted even after Undo");
   } finally { await api(`/api/videos/${id}`, { method: "DELETE" }); }
