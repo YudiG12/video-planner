@@ -44,9 +44,18 @@ function useData() {
   const queue = useRef<Record<string, Promise<unknown>>>({});
   const advanced = useRef<Record<string, Record<number, number>>>({}); // own saves: base -> new version
   const pending = useRef<Record<string, number>>({}); // blocks with a save in flight: a re-read must not undo them
-  // Server data replaces local data, except blocks this tab is still saving
-  const merge = (list: Video[]) => setVideos((local) => list.filter((f) => !deleting.current.has(f.id)).map((f) => {
-    const l = local.find((x) => x.id === f.id);
+  const pendingD = useRef<Record<string, number>>({}); // "videoId:derivative" with a save in flight
+  const keepDerivs = (id: string, server: Record<string, boolean>, local: Record<string, boolean>) => {
+    const out = { ...server };
+    for (const [key, n] of Object.entries(pendingD.current)) {
+      if (n > 0 && key.startsWith(id + ":")) { const k = key.slice(id.length + 1); out[k] = !!local[k]; }
+    }
+    return out;
+  };
+  // Server data replaces local data, except blocks and derivatives this tab is still saving
+  const merge = (list: Video[]) => setVideos((local) => list.filter((f) => !deleting.current.has(f.id)).map((f0) => {
+    const l = local.find((x) => x.id === f0.id);
+    const f = l ? { ...f0, derivatives: keepDerivs(f0.id, f0.derivatives, l.derivatives) } : f0;
     const keep = l ? Object.keys(pending.current).filter((k) => pending.current[k] > 0 && k.startsWith(f.id + ":")).map((k) => k.slice(f.id.length + 1)) : [];
     if (!l || !keep.length) return f;
     const script = { ...f.script }, script_versions = { ...f.script_versions };
@@ -98,14 +107,22 @@ function useData() {
       setLocal(id, block, c.theirs, c.version);
     });
   };
+  // Field saves of one video run one at a time, in click order. A derivative change only touches its own key, and keys
+  // with a save in flight keep their local value when older server data arrives (a response or a live re-read).
   const patch = async (id: string, p: Partial<Video>) => {
     const { script, ...rest } = p;
     for (const [block, value] of Object.entries(script || {})) saveBlock(id, block, value);
     if (!Object.keys(rest).length) return;
-    setVideos((vs) => vs.map((v) => (v.id === id ? { ...v, ...rest } : v)));
-    const nv = await api.update(id, rest);
-    setVideos((vs) => vs.map((v) => (v.id === id ? { ...nv, script: v.script, script_versions: v.script_versions } : v)));
-    return nv;
+    const dkeys = Object.keys(rest.derivatives || {});
+    for (const k of dkeys) pendingD.current[`${id}:${k}`] = (pendingD.current[`${id}:${k}`] || 0) + 1;
+    setVideos((vs) => vs.map((v) => (v.id === id ? { ...v, ...rest, derivatives: { ...v.derivatives, ...rest.derivatives } } : v)));
+    let nv: Video | undefined;
+    await enqueue(`${id}:fields`, async () => {
+      try { nv = await api.update(id, rest); } finally { for (const k of dkeys) pendingD.current[`${id}:${k}`]--; }
+    });
+    const fresh = nv!;
+    setVideos((vs) => vs.map((v) => (v.id === id ? { ...fresh, derivatives: keepDerivs(id, fresh.derivatives, v.derivatives), script: v.script, script_versions: v.script_versions } : v)));
+    return fresh;
   };
   const live = useLive({ videos: vref, merge, setVideos, loadBoot });
   return { boot, videos, setVideos, reload, patch, saveBlock, conflicts, resolve, saved, trash, removeLater, undoRemove, ...live };

@@ -505,6 +505,45 @@ await check("ui: record calendar side panel (calendar-side.gif)", async () => {
   const vid = await p.video().path(); await ctx.close();
   try { execSync(`ffmpeg -y -loglevel error -i ${vid} -vf "fps=8,scale=900:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse" ${OUT}/calendar-side.gif`); } catch { console.log("      (ffmpeg not found: kept webm only)"); }
 });
+// ---- Derivatives: each checkbox changes only its own key, quick clicks all land (slow, out-of-order server replies) ----
+await check("ui: derivative checkboxes change only their own key; 5 quick clicks (Derivatives page + video details) all persist", async () => {
+  const c = await api("/api/videos", { method: "POST", body: JSON.stringify({ title: "Deriv race verify", format: "longo", status: "Finalizado" }) }); const id = c.body.id;
+  const keys = ["cortes_ig", "shorts", "tiktok", "linkedin", "journal"];
+  await api(`/api/videos/${id}`, { method: "PATCH", body: JSON.stringify({ publish_date: "2099-01-01", derivatives: { cortes_ig: false, shorts: true, tiktok: false, linkedin: true, journal: false } }) });
+  // replies arrive late and in reverse order (first click answered last), to provoke the race
+  let n = 0;
+  const slow = async (route) => { if (route.request().method() !== "PATCH") return route.continue(); const d = 900 - 150 * (n++ % 5); await new Promise((r) => setTimeout(r, d)); await route.continue(); };
+  await page.route(`${BASE}/api/videos/${id}`, slow);
+  try {
+    const state = async (cbs) => Promise.all(keys.map((_, i) => cbs.nth(i).evaluate((el) => el.classList.contains("on"))));
+    const run = async (cbs, before) => {
+      // one click: only that box changes
+      await cbs.nth(0).click(); await page.waitForTimeout(100);
+      let s = await state(cbs); const exp1 = [...before]; exp1[0] = !exp1[0];
+      assert(JSON.stringify(s) === JSON.stringify(exp1), `one click changed others: ${JSON.stringify(s)} vs ${JSON.stringify(exp1)}`);
+      for (let i = 1; i < 5; i++) await cbs.nth(i).click({ delay: 0 });
+      const exp = before.map((x) => !x);
+      for (let t = 0; t < 30; t++) { s = await state(cbs); if (JSON.stringify(s) !== JSON.stringify(exp)) throw new Error(`mid-flight state ${JSON.stringify(s)} vs ${JSON.stringify(exp)}`); await page.waitForTimeout(100); }
+      const g = (await api(`/api/videos/${id}`)).body.derivatives;
+      assert(JSON.stringify(keys.map((k) => !!g[k])) === JSON.stringify(exp), `server: ${JSON.stringify(g)}`);
+      await page.reload({ waitUntil: "networkidle" });
+      return exp;
+    };
+    await page.goto(`${BASE}/derivados`, { waitUntil: "networkidle" });
+    const row = () => page.locator(".drow", { hasText: "Deriv race verify" }).locator(".cb");
+    let exp = await run(row(), [false, true, false, true, false]);
+    assert(JSON.stringify(await state(row())) === JSON.stringify(exp), "Derivatives page after reload differs");
+    await page.screenshot({ path: `${OUT}/derivados-checkboxes.png` });
+    // the same in the video details (full page, where the derivative checklist lives)
+    await page.goto(`${BASE}/derivados#/video/${id}`, { waitUntil: "networkidle" });
+    const pcb = () => page.locator(".check .cb");
+    await pcb().first().waitFor({ timeout: 5000 });
+    exp = await run(pcb(), exp);
+    await pcb().first().waitFor({ timeout: 5000 });
+    assert(JSON.stringify(await state(pcb())) === JSON.stringify(exp), "video details after reload differ");
+    await page.screenshot({ path: `${OUT}/video-derivatives.png` });
+  } finally { await page.unroute(`${BASE}/api/videos/${id}`, slow); await api(`/api/videos/${id}`, { method: "DELETE" }); }
+});
 // ---- Motion (src/motion.tsx): fast feedback, movement that explains, undo, reduced motion ----
 const motion = async (pg, { shots = false } = {}) => {
   const mk = async (title, status = "Esse mês") => (await api("/api/videos", { method: "POST", body: JSON.stringify({ title, format: "longo", status }) })).body.id;
