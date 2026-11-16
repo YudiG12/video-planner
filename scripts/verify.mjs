@@ -617,6 +617,51 @@ const motion = async (pg, { shots = false } = {}) => {
   } finally { await api(`/api/videos/${id}`, { method: "DELETE" }); }
 };
 await check("motion: card slides to its column, confetti on Finalizado, counter bumps, delete has Undo", () => motion(page, { shots: true }));
+// Delete confirmation: the "Delete" row turns into the confirmation in place (no new box), ≤ 200 ms, confirm focused
+const inlineDelete = async (reducedMotion) => {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion }); await offline(ctx);
+  const p = await ctx.newPage(); const title = `Inline delete ${reducedMotion}`;
+  const id = (await api("/api/videos", { method: "POST", body: JSON.stringify({ title, format: "longo", status: "Esse mês" }) })).body.id;
+  try {
+    await p.goto(`${BASE}/kanban`, { waitUntil: "networkidle" });
+    await p.locator(`.card[data-flip="${id}"]`).click();
+    const panel = p.locator("aside.panel"); const pop = panel.locator(".opts-pop");
+    const askNow = async () => {
+      await panel.locator(".opts-del").click();
+      // what was animated right after the click, and how long
+      return p.evaluate(() => { const els = [...document.querySelectorAll(".opts-pop .opts-row, .opts-pop .opts-row *")];
+        return els.flatMap((e) => e.getAnimations()).map((a) => Number(a.effect.getTiming().duration) || 0); });
+    };
+    await panel.locator(".opts-btn").click();
+    const row = await pop.locator(".opts-row").elementHandle();
+    const durs = await askNow();
+    assert(await row.evaluate((e) => e.isConnected && e.classList.contains("is-confirm")), "the Delete row itself didn't turn into the confirmation");
+    assert(await pop.locator(":scope > *").count() === 1 && await p.locator(".opts-confirm").count() === 1, "confirmation added another box");
+    assert(await panel.locator(".opts-confirm").innerText().then((x) => x.includes(title)), "confirmation doesn't name the video");
+    assert(await p.evaluate(() => document.activeElement?.classList.contains("btn-danger")), "confirm button doesn't have keyboard focus");
+    if (reducedMotion === "reduce") assert(durs.every((d) => d <= 1), `reduced motion still animates: ${durs}`);
+    else assert(durs.length > 0 && durs.every((d) => d <= 200), `confirmation animation missing or over 200 ms: ${durs}`);
+    if (reducedMotion !== "reduce") { await p.waitForTimeout(260); const b = await panel.boundingBox(); await p.screenshot({ path: `${OUT}/delete-confirm.png`, clip: { x: b.x, y: 0, width: b.width, height: 420 } }); }
+    // Esc → back to the plain Delete row (menu stays open)
+    await p.keyboard.press("Escape"); await p.waitForTimeout(50);
+    assert(await panel.locator(".opts-confirm").count() === 0 && await panel.locator(".opts-del").count() === 1, "Esc didn't go back to the Delete row");
+    // Cancel → back
+    await askNow(); await panel.locator(".opts-confirm .btn-ghost").click();
+    assert(await panel.locator(".opts-confirm").count() === 0 && await panel.locator(".opts-del").count() === 1, "Cancel didn't go back to the Delete row");
+    // click outside → closes, nothing deleted
+    await askNow(); const pb = await panel.boundingBox(); await p.mouse.click(pb.x + pb.width / 2, pb.y + pb.height - 8); await p.waitForTimeout(50);
+    assert(await panel.locator(".opts-pop").count() === 0, "click outside didn't close the confirmation");
+    assert(await p.locator(".toast").count() === 0 && (await api(`/api/videos/${id}`)).status === 200, "dismissing deleted the video");
+    // Enter on the focused confirm button deletes, with the Undo toast
+    assert(await panel.locator(".opts-btn").count() === 1, "panel closed");
+    await panel.locator(".opts-btn").click(); await askNow(); await p.keyboard.press("Enter");
+    await p.locator(".toast").waitFor({ timeout: 2000 });
+    assert(await p.locator(`.card[data-flip="${id}"]`).count() === 0, "confirm didn't delete");
+    await p.locator(".toast-undo").click(); await p.locator(`.card[data-flip="${id}"]`).waitFor({ timeout: 2000 });
+  } finally { await ctx.close(); await api(`/api/videos/${id}`, { method: "DELETE" }); }
+};
+await check("ui: Delete turns into an inline confirmation in place (≤ 200 ms, confirm focused; Esc/Cancel/outside go back; confirm → Undo toast)", () => inlineDelete("no-preference"));
+await check("ui: inline delete confirmation with reduced motion: no animation, same behaviour", () => inlineDelete("reduce"));
 await check("motion: feedback under 100 ms (derivative checkbox) and a 'saved' tick after editing a block", async () => {
   await page.goto(`${BASE}/derivados`, { waitUntil: "networkidle" });
   const cb = page.locator(".drow:not(.h) .cb:not(.on)").first(); await cb.waitFor({ timeout: 5000 });

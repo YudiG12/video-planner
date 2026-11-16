@@ -395,25 +395,38 @@ function CardMeta({ data, v, small }: { data: Data; v: Video; small?: boolean })
   );
 }
 
-// "Options" menu with delete (asks for confirmation first)
+// "Options" menu with delete. The "Delete" row itself morphs into the confirmation in place
+// (no extra box): Confirm deletes (5 s Undo toast); Cancel / Esc go back to the plain row; a click outside closes.
 function Options({ data, v, after }: { data: Data; v: Video; after: () => void }) {
   const [open, setOpen] = useState(false);
   const [confirm, setConfirm] = useState(false);
+  const box = useRef<HTMLDivElement>(null), yes = useRef<HTMLButtonElement>(null), del = useRef<HTMLButtonElement>(null);
   const kind = v.status === "Ideias" ? "Apagar ideia" : "Apagar roteiro";
+  const back = () => { setConfirm(false); requestAnimationFrame(() => del.current?.focus()); };
+  useEffect(() => {
+    if (!open) return;
+    const out = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) { setConfirm(false); setOpen(false); } };
+    const esc = (e: KeyboardEvent) => { if (e.key !== "Escape") return; if (confirm) back(); else setOpen(false); };
+    window.addEventListener("mousedown", out); window.addEventListener("keydown", esc);
+    return () => { window.removeEventListener("mousedown", out); window.removeEventListener("keydown", esc); };
+  }, [open, confirm]);
+  useEffect(() => { if (confirm) yes.current?.focus(); }, [confirm]);
   return (
-    <div className="opts">
-      <button className="iconbtn opts-btn" onClick={() => { setOpen(!open); setConfirm(false); }} title={t("Opções")}>{t("Opções")}</button>
+    <div className="opts" ref={box}>
+      <button className="iconbtn opts-btn" onClick={() => { setOpen(!open); setConfirm(false); }} title={t("Opções")} aria-expanded={open}>{t("Opções")}</button>
       {open && (
-        <div className="opts-pop" onMouseDown={(e) => e.stopPropagation()}>
-          {!confirm ? <button className="opts-del" onClick={() => setConfirm(true)}>{t(kind)}</button> : (
-            <div className="opts-confirm">
-              <span>{t("Apagar")} <b>{v.title}</b>? {t("Não dá pra desfazer.")}</span>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button className="btn-ghost" onClick={() => { setConfirm(false); setOpen(false); }}>{t("Cancelar")}</button>
-                <button className="btn-danger" onClick={() => { setOpen(false); after(); data.removeLater(v); }}>{t("Apagar")}</button>
+        <div className="opts-pop">
+          <div className={"opts-row" + (confirm ? " is-confirm" : "")}>
+            {!confirm ? <button ref={del} className="opts-del" onClick={() => setConfirm(true)}>{t(kind)}</button> : (
+              <div className="opts-confirm" role="group" aria-label={t(kind)}>
+                <span className="opts-q">{t("Apagar")} <b>{v.title}</b>?</span>
+                <div className="opts-acts">
+                  <button className="btn-ghost" onClick={back}>{t("Cancelar")}</button>
+                  <button ref={yes} className="btn-danger" onClick={() => { setOpen(false); setConfirm(false); after(); data.removeLater(v); }}>{t("Apagar")}</button>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
     </div>
