@@ -6,7 +6,7 @@ export const getLocale = () => locale;
 const EN: Record<string, string> = {
   "Kanban": "Kanban", "Calendário": "Calendar", "Derivados": "Derivatives", "Ideias": "Ideas",
   "Todos": "All", "Longos": "Long", "Verticais": "Vertical", "+ Novo vídeo": "+ New video", "Novo vídeo": "New video",
-  "+ Nova ideia": "+ New idea", "Nova ideia": "New idea",
+  "+ Nova ideia": "+ New idea", "Nova ideia": "New idea", "Não deu pra criar o vídeo. Tente de novo.": "Couldn't create the video. Try again.",
   "Esse mês": "This month", "Produzindo": "Recording", "Editando": "Editing", "Finalizado": "Published", "Cancelados": "Cancelled",
   "Título + thumbnail · teste A/B": "Title + thumbnail · A/B test", "Cortar título como no YouTube": "Truncate title like YouTube",
   "Este bloco foi alterado em outro lugar": "This block was changed somewhere else", "Versão mais nova": "Newer version",

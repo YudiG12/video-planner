@@ -6,6 +6,7 @@ import { Field } from "./editor";
 import { DiffText } from "./diff";
 import { useFlip, Count, celebrate, useFlash } from "./motion";
 
+const TMP = "tmp-"; // id prefix of a video still being created (see `create` in useData)
 type View = "kanban" | "calendario" | "derivados" | "ideias";
 type Filter = "todos" | Format;
 
@@ -31,7 +32,7 @@ function useData() {
   const [saved, setSaved] = useState<Record<string, number>>({}); // own saves per block, to flash "saved"
   // Delete waits 5 s behind an "Undo" toast; the video disappears at once
   const [trash, setTrash] = useState<{ v: Video; timer: number } | null>(null);
-  const commit = (id: string) => api.remove(id).finally(() => { deleting.current.delete(id); reload(); });
+  const commit = (id: string) => whenReal(id).then((rid) => { if (rid) return api.remove(rid).finally(() => deleting.current.delete(rid)); }).finally(() => { deleting.current.delete(id); reload(); });
   const removeLater = (v: Video) => {
     if (trash) { window.clearTimeout(trash.timer); commit(trash.v.id); }
     deleting.current.add(v.id);
@@ -39,8 +40,15 @@ function useData() {
     const timer = window.setTimeout(() => { commit(v.id); setTrash(null); }, 5000);
     setTrash({ v, timer });
   };
-  // Undo: stop hiding it and re-read from the server (it was never deleted there), so it can't be duplicated
-  const undoRemove = () => { if (!trash) return; window.clearTimeout(trash.timer); deleting.current.delete(trash.v.id); setTrash(null); reload(); };
+  // Undo: stop hiding it and re-read from the server (it was never deleted there), so it can't be duplicated.
+  // A video still being created isn't on the server yet: its draft goes back on screen and gets the real id later.
+  const undoRemove = () => {
+    if (!trash) return;
+    const v = trash.v;
+    window.clearTimeout(trash.timer); deleting.current.delete(v.id); deleting.current.delete(alias.current[v.id]); setTrash(null);
+    if (v.id.startsWith(TMP) && !alias.current[v.id] && v.id in creating.current) setVideos((vs) => (vs.some((x) => x.id === v.id) ? vs : [...vs, v]));
+    reload();
+  };
   const queue = useRef<Record<string, Promise<unknown>>>({});
   const advanced = useRef<Record<string, Record<number, number>>>({}); // own saves: base -> new version
   const pending = useRef<Record<string, number>>({}); // blocks with a save in flight: a re-read must not undo them
@@ -53,7 +61,8 @@ function useData() {
     return out;
   };
   // Server data replaces local data, except blocks and derivatives this tab is still saving
-  const merge = (list: Video[]) => setVideos((local) => list.filter((f) => !deleting.current.has(f.id)).map((f0) => {
+  const merge = (list: Video[]) => setVideos((local) => [...list.filter((f) => !deleting.current.has(f.id)).map((f0) => {
+    fresh.current.delete(f0.id);
     const l = local.find((x) => x.id === f0.id);
     const f = l ? { ...f0, derivatives: keepDerivs(f0.id, f0.derivatives, l.derivatives) } : f0;
     const keep = l ? Object.keys(pending.current).filter((k) => pending.current[k] > 0 && k.startsWith(f.id + ":")).map((k) => k.slice(f.id.length + 1)) : [];
@@ -61,7 +70,9 @@ function useData() {
     const script = { ...f.script }, script_versions = { ...f.script_versions };
     for (const b of keep) { script[b] = l.script[b]; if (l.script_versions?.[b] != null) script_versions[b] = l.script_versions[b]; }
     return { ...f, script, script_versions };
-  }));
+  }),
+  // videos still being created here (temporary id), or created but not yet in this (possibly older) server list
+  ...local.filter((l) => !list.some((f) => f.id === l.id) && (l.id.startsWith(TMP) || fresh.current.has(l.id)) && !deleting.current.has(l.id))]);
   const reload = () => api.list().then(merge);
   const loadBoot = () => api.boot().then((b) => { setLocale(b.locale); document.documentElement.lang = b.locale || "en"; setBoot(b); });
   useEffect(() => { loadBoot(); reload(); }, []);
@@ -84,9 +95,10 @@ function useData() {
   };
   // Save one block with the version it was based on. A save based on a version that our own previous save replaced is
   // moved forward (our edits build on each other); anything else conflicts.
-  const saveBlock = (id: string, block: string, value: any, base?: number) => {
+  const saveBlock = (id: string, block: string, value: any, base?: number): Promise<void> => {
     const key = `${id}:${block}`;
     setLocal(id, block, value);
+    if (id.startsWith(TMP)) return whenReal(id).then((rid) => { if (rid) return saveBlock(rid, block, value, base); });
     pending.current[key] = (pending.current[key] || 0) + 1;
     return enqueue(key, async () => {
       try {
@@ -109,7 +121,12 @@ function useData() {
   };
   // Field saves of one video run one at a time, in click order. A derivative change only touches its own key, and keys
   // with a save in flight keep their local value when older server data arrives (a response or a live re-read).
-  const patch = async (id: string, p: Partial<Video>) => {
+  const patch = async (id: string, p: Partial<Video>): Promise<Video | undefined> => {
+    if (id.startsWith(TMP)) {
+      setVideos((vs) => vs.map((v) => (v.id === id ? { ...v, ...p, script: { ...v.script, ...p.script }, derivatives: { ...v.derivatives, ...p.derivatives } } : v)));
+      const rid = await whenReal(id);
+      return rid ? patch(rid, p) : undefined;
+    }
     const { script, ...rest } = p;
     for (const [block, value] of Object.entries(script || {})) saveBlock(id, block, value);
     if (!Object.keys(rest).length) return;
@@ -124,8 +141,52 @@ function useData() {
     setVideos((vs) => vs.map((v) => (v.id === id ? { ...fresh, derivatives: keepDerivs(id, fresh.derivatives, v.derivatives), script: v.script, script_versions: v.script_versions } : v)));
     return fresh;
   };
+  // ---- create at once (optimistic) ----
+  // The card shows (and its details open) right away with a temporary id; the create runs in the background and the
+  // real id is swapped in. Edits made meanwhile wait for the real id and are then saved; `stable` keeps React keys and
+  // FLIP keys on the temporary id so nothing remounts (no flicker, the title being typed stays).
+  const alias = useRef<Record<string, string>>({}); // temporary id -> real id
+  const born = useRef<Record<string, string>>({}); // real id -> temporary id
+  const creating = useRef<Record<string, Promise<string | null>>>({});
+  const fresh = useRef<Set<string>>(new Set()); // created here, not yet seen in a server list
+  const [error, setError] = useState<{ msg: string; n: number } | null>(null);
+  const errTimer = useRef<number>();
+  const fail = (msg: string) => { window.clearTimeout(errTimer.current); setError((e) => ({ msg, n: (e?.n || 0) + 1 })); errTimer.current = window.setTimeout(() => setError(null), 4000); };
+  const whenReal = (id: string): Promise<string | null> => (id.startsWith(TMP) ? (alias.current[id] ? Promise.resolve(alias.current[id]) : creating.current[id] || Promise.resolve(null)) : Promise.resolve(id));
+  const current = (id: string) => alias.current[id] || id;
+  const stable = (id: string) => born.current[id] || id;
+  const create = (fields: Partial<Video> & { title: string; format: Format }) => {
+    const tmp = TMP + Math.random().toString(36).slice(2, 10);
+    const status = fields.status ?? "Ideias";
+    const vs0 = vref.current;
+    const ep = fields.series_id ? Math.max(0, ...vs0.filter((v) => v.series_id === fields.series_id).map((v) => v.episode || 0)) + 1 : null;
+    const draft: Video = {
+      id: tmp, status, series_id: null, episode: ep, sponsor_id: null, publish_date: null, script: {}, script_versions: {}, derivatives: {}, history: [],
+      position: Math.max(0, ...vs0.filter((v) => v.status === status).map((v) => v.position)) + 1, ...fields,
+      ...({ updated_at: new Date().toISOString().replace("T", " ").slice(0, 19) } as any),
+    };
+    setVideos((vs) => [...vs, draft]);
+    creating.current[tmp] = api.create(fields).then((sv) => {
+      alias.current[tmp] = sv.id; born.current[sv.id] = tmp; fresh.current.add(sv.id);
+      // server copy, plus whatever was changed here before it answered (those changes are being saved right after)
+      // a re-read that arrived before this answer may already hold the real video: the draft takes its place (one card)
+      setVideos((vs) => vs.filter((v) => v.id !== sv.id || !vs.some((d) => d.id === tmp)).map((v) => {
+        if (v.id !== tmp) return v;
+        const out: any = { ...sv, script: { ...sv.script, ...v.script }, derivatives: { ...sv.derivatives, ...v.derivatives } };
+        for (const k of ["title", "format", "status", "series_id", "episode", "sponsor_id", "publish_date"] as const) if (v[k] !== (draft as any)[k]) out[k] = v[k];
+        return out;
+      }));
+      if (deleting.current.has(tmp)) { deleting.current.add(sv.id); }
+      return sv.id;
+    }, () => {
+      setVideos((vs) => vs.filter((v) => v.id !== tmp));
+      fail(t("Não deu pra criar o vídeo. Tente de novo."));
+      return null;
+    }).finally(() => { delete creating.current[tmp]; });
+    return tmp;
+  };
   const live = useLive({ videos: vref, merge, setVideos, loadBoot });
-  return { boot, videos, setVideos, reload, patch, saveBlock, conflicts, resolve, saved, trash, removeLater, undoRemove, ...live };
+  return { boot, videos, setVideos, reload, patch, saveBlock, conflicts, resolve, saved, trash, removeLater, undoRemove, create, whenReal, current, stable, error, ...live };
 }
 
 // ---------- live updates (/api/live) ----------
@@ -242,24 +303,35 @@ export default function App() {
   const setView = (x: View) => { setViewRaw(x); if (location.pathname !== "/" + x) history.pushState(null, "", "/" + x + location.hash); };
   useEffect(() => { const h = () => setViewRaw(fromPath()); window.addEventListener("popstate", h); return () => window.removeEventListener("popstate", h); }, []);
   const [filter, setFilter] = useState<Filter>("todos");
-  const [openId, setOpenIdRaw] = useState<string | null>(null);
+  const [openRaw, setOpenIdRaw] = useState<string | null>(null);
+  const openId = openRaw && data.current(openRaw); // a video opened while being created follows it to its real id
   const [closing, setClosing] = useState(false);
+  const closeTimer = useRef<number>();
   const setOpenId = (id: string | null) => {
+    window.clearTimeout(closeTimer.current); // opening right after a close (e.g. "+ New idea" while a panel was open) wins
     if (id) { setClosing(false); setOpenIdRaw(id); return; }
     setClosing(true);
-    setTimeout(() => { setOpenIdRaw(null); setClosing(false); }, 200);
+    closeTimer.current = window.setTimeout(() => { setOpenIdRaw(null); setClosing(false); }, 200);
   };
+  // a video opened while being created whose create failed: close its details
+  useEffect(() => { if (openId?.startsWith(TMP) && !data.videos.some((v) => v.id === openId)) setOpenIdRaw(null); }, [data.videos, openId]);
 
-  const full = hash.match(/^#\/video\/(.+)$/)?.[1];
+  // full-screen route: a video expanded while being created follows it to its real id (and the URL is rewritten to it)
+  const fullRaw = hash.match(/^#\/video\/(.+)$/)?.[1];
+  const full = fullRaw && data.current(fullRaw);
+  useEffect(() => {
+    if (!fullRaw || !full) return;
+    if (full !== fullRaw) history.replaceState(null, "", location.pathname + location.search + "#/video/" + full);
+    else if (full.startsWith(TMP) && !data.videos.some((v) => v.id === full)) location.hash = ""; // its create failed
+  }, [fullRaw, full, data.videos]);
   const shown = data.videos.filter((v) => filter === "todos" || v.format === filter);
   useFlip(data.videos);
 
-  const novo = async () => {
+  const novo = () => {
     const format: Format = filter === "vertical" ? "vertical" : "longo";
-    const v = await api.create({ title: t("Novo vídeo"), format });
-    await data.reload();
+    const id = data.create({ title: t("Novo vídeo"), format });
     setView("kanban");
-    setOpenId(v.id);
+    setOpenId(id);
   };
 
   if (full) return <FullScreen data={data} id={full} />;
@@ -299,6 +371,8 @@ export default function App() {
           <button className="toast-undo" onClick={data.undoRemove}>{t("Desfazer")}</button>
         </div>
       )}
+      {/* shown together with an Undo toast too (stacked above it), so a failure is never hidden */}
+      {data.error && <div className={"toast toast-err" + (data.trash ? " toast-up" : "")} role="alert" key={data.error.n}>{data.error.msg}</div>}
     </div>
   );
 }
@@ -396,7 +470,7 @@ const CardBusy = ({ data, v }: { data: Data; v: Video }) => agentEditing(data, v
   ? <span className="agent-badge card-badge" role="status" aria-label={t("Claude está editando…")}><i /><i /><i />Claude</span> : null;
 function Card({ data, v, sel, onClick, noDrag }: { data: Data; v: Video; sel: boolean; onClick: () => void; noDrag?: boolean }) {
   return (
-    <div className={`card ${v.format === "vertical" ? "ig" : ""} ${sel ? "sel" : ""}${agentEditing(data, v.id) ? " agent-editing" : ""}`} data-id={v.id} data-flip={noDrag ? undefined : v.id} draggable={!noDrag}
+    <div className={`card ${v.format === "vertical" ? "ig" : ""} ${sel ? "sel" : ""}${agentEditing(data, v.id) ? " agent-editing" : ""}`} data-id={v.id} data-flip={noDrag ? undefined : data.stable(v.id)} draggable={!noDrag}
       onDragStart={(e) => { const el = e.currentTarget; el.classList.add("lift"); requestAnimationFrame(() => el.classList.remove("lift")); e.dataTransfer.setData("text/plain", v.id); e.dataTransfer.effectAllowed = "move"; window.dispatchEvent(new CustomEvent("vp-drag", { detail: v.id })); }}
       onDragEnd={() => window.dispatchEvent(new CustomEvent("vp-drag", { detail: null }))} onClick={onClick}>
       {data.dots[v.id] && !agentEditing(data, v.id) && <span className="dot-changed" title={t("Alterado pelo Claude")} aria-label={t("Alterado pelo Claude")} />}
@@ -440,8 +514,8 @@ function Kanban({ data, videos, openId, setOpenId, closing }: { data: Data; vide
     const position = prev == null && next == null ? 1 : prev == null ? next! - 1 : next == null ? prev + 1 : (prev + next) / 2;
     data.setVideos((vs) => vs.map((v) => (v.id === id ? { ...v, status: slot.st, position } : v)).sort((a, b) => a.position - b.position));
     end();
-    if (slot.st === "Finalizado" && videos.find((v) => v.id === id)?.status !== "Finalizado") requestAnimationFrame(() => celebrate(document.querySelector(`[data-flip="${id}"]`)));
-    await api.move(id, slot.st, position); data.reload();
+    if (slot.st === "Finalizado" && videos.find((v) => v.id === id)?.status !== "Finalizado") requestAnimationFrame(() => celebrate(document.querySelector(`[data-flip="${data.stable(id)}"]`)));
+    const rid = await data.whenReal(id); if (rid) { await api.move(rid, slot.st, position); data.reload(); }
   };
   return (
     <>
@@ -450,7 +524,7 @@ function Kanban({ data, videos, openId, setOpenId, closing }: { data: Data; vide
         <span className="recent-h"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3767A8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span className="eyebrow">{t("Recentes")}</span></span>
         <div className="recent-row">
           {[...videos].filter((v) => v.status !== "Cancelados").sort((a, b) => ((b as any).updated_at || "").localeCompare((a as any).updated_at || "")).slice(0, 6)
-            .map((v) => <Card key={v.id} data={data} v={v} noDrag sel={openId === v.id} onClick={() => setOpenId(v.id)} />)}
+            .map((v) => <Card key={data.stable(v.id)} data={data} v={v} noDrag sel={openId === v.id} onClick={() => setOpenId(v.id)} />)}
         </div>
       </div>
       <div className="kanban">
@@ -467,7 +541,7 @@ function Kanban({ data, videos, openId, setOpenId, closing }: { data: Data; vide
                 videos.filter((v) => v.status === st).forEach((v) => {
                   if (v.id === drag) { out.push(<div key={v.id} className="dragging-src"><Card data={data} v={v} sel={false} onClick={() => {}} /></div>); return; }
                   if (slot?.st === st && slot.i === i) out.push(ph);
-                  out.push(<Card key={v.id} data={data} v={v} sel={openId === v.id} onClick={() => setOpenId(v.id)} />); i++;
+                  out.push(<Card key={data.stable(v.id)} data={data} v={v} sel={openId === v.id} onClick={() => setOpenId(v.id)} />); i++;
                 });
                 return out; })()}
             </div>
@@ -486,6 +560,9 @@ function Panel({ data, id, close, closing }: { data: Data; id: string; close: ()
   const [pw, setPwRaw] = useState(() => { try { return Number(localStorage.getItem("vp-pw")) || 620; } catch { return 620; } });
   const setPw = (w: number) => { setPwRaw(w); try { localStorage.setItem("vp-pw", String(w)); } catch {} };
   data.useOpenVideo(id);
+  // the script editors are the heavy part: the panel (meta + title) opens on the click, they mount one frame later
+  const [ready, setReady] = useState(false);
+  useEffect(() => { const r = requestAnimationFrame(() => setReady(true)); return () => cancelAnimationFrame(r); }, []);
   const v = data.videos.find((x) => x.id === id);
   if (!v) return null;
   return (
@@ -505,9 +582,9 @@ function Panel({ data, id, close, closing }: { data: Data; id: string; close: ()
           <button className="iconbtn" onClick={close} title={t("Fechar")}><I.IX /></button>
         </div>
       </div>
-      <div className="panel-swap" key={v.id}>
+      <div className="panel-swap" key={data.stable(v.id)}>
         <TitleInput data={data} v={v} />
-        <Script data={data} v={v} />
+        {ready && <Script data={data} v={v} />}
       </div>
     </aside>
   );
@@ -574,7 +651,7 @@ function Meta({ data, v }: { data: Data; v: Video; big?: boolean }) {
 
 function TitleInput({ data, v }: { data: Data; v: Video }) {
   const [t, setT] = useState(v.title);
-  useEffect(() => setT(v.title), [v.id, v.title]);
+  useEffect(() => setT(v.title), [data.stable(v.id), v.title]);
   return <textarea className="title-in" rows={1} style={{ fieldSizing: "content" } as any} value={t} onChange={(e) => setT(e.target.value)} onBlur={() => t !== v.title && data.patch(v.id, { title: t })} />;
 }
 
@@ -819,7 +896,7 @@ function FullScreen({ data, id }: { data: Data; id: string }) {
   data.useOpenVideo(id);
   const v = data.videos.find((x) => x.id === id);
   const exists = !!v;
-  useEffect(() => { if (exists) api.get(id).then((x) => setHist(x.history)).catch(() => {}); }, [id, exists, v?.script, v?.status]);
+  useEffect(() => { if (exists && !id.startsWith(TMP)) api.get(id).then((x) => setHist(x.history)).catch(() => {}); }, [id, exists, v?.script, v?.status]);
   if (!data.boot || !v) return <div className="empty">{t("Carregando…")}</div>;
   const series = data.boot.series.filter((s) => s.format === v.format);
   const deriv = v.format === "longo" ? DERIV_LONGO : DERIV_VERT;
@@ -940,7 +1017,7 @@ function Calendar({ data, videos, open, detailsOpen, closeDetails }: { data: Dat
     if (was >= 0 && was === slot.i) return; // dropped where it was
     const position = prev == null && next == null ? v.position : prev == null ? next! - 1 : next == null ? prev + 1 : (prev + next) / 2;
     data.setVideos((vs) => vs.map((x) => (x.id === id ? { ...x, status: slot.st, position, publish_date: null } : x)).sort((a, b) => a.position - b.position));
-    await api.move(id, slot.st, position); data.reload();
+    const rid = await data.whenReal(id); if (rid) { await api.move(rid, slot.st, position); data.reload(); }
   };
   const label = (d: Date) => d.toLocaleDateString(dateLocale(), { month: "long", year: "numeric" }).replace(/^./, (c) => c.toUpperCase()).replace(" de ", " ");
   return (
@@ -971,7 +1048,7 @@ function Calendar({ data, videos, open, detailsOpen, closeDetails }: { data: Dat
                 onDragOver={(e) => { e.preventDefault(); setOver(k); }} onDragLeave={() => setOver(null)} onDrop={(e) => drop(k, e)}>
                 <span className="n">{day === 1 ? <b className="mlabel">{label(d)}</b> : null}{k === today ? `${day} · ${t("hoje")}` : day}</span>
                 {(byDate[k] || []).map((v) => (
-                  <div key={v.id} className={"chip" + (v.format === "vertical" ? " ig" : "") + (agentEditing(data, v.id) ? " agent-editing" : "")} data-id={v.id} data-flip={v.id} draggable onDragStart={(e) => e.dataTransfer.setData("text/plain", v.id)} onClick={() => open(v.id)}>
+                  <div key={data.stable(v.id)} className={"chip" + (v.format === "vertical" ? " ig" : "") + (agentEditing(data, v.id) ? " agent-editing" : "")} data-id={v.id} data-flip={data.stable(v.id)} draggable onDragStart={(e) => e.dataTransfer.setData("text/plain", v.id)} onClick={() => open(v.id)}>
                     <CardBusy data={data} v={v} />
                     <span className="chip-t">{v.title}</span>
                     <CardMeta data={data} v={v} small />
@@ -1004,9 +1081,9 @@ function Calendar({ data, videos, open, detailsOpen, closeDetails }: { data: Dat
                 <div className="side-group-h">{t(st)} <Count className="mono" n={items.length} /></div>
                 <div className="side-group-list">
                   {items.map((v) => { const i = v.id === sideDrag ? -1 : j++; return (
-                    <Fragment key={v.id}>
+                    <Fragment key={data.stable(v.id)}>
                       {slotHere === i && <div className="side-slot" />}
-                      <div className={"chip" + (v.format === "vertical" ? " ig" : "") + (v.id === sideDrag ? " dragging" : "") + (agentEditing(data, v.id) ? " agent-editing" : "")} data-id={v.id} data-flip={v.id} draggable
+                      <div className={"chip" + (v.format === "vertical" ? " ig" : "") + (v.id === sideDrag ? " dragging" : "") + (agentEditing(data, v.id) ? " agent-editing" : "")} data-id={v.id} data-flip={data.stable(v.id)} draggable
                         onDragStart={(e) => { e.dataTransfer.setData("text/plain", v.id); e.dataTransfer.effectAllowed = "move"; setTimeout(() => setSideDrag(v.id), 0); }}
                         onDragEnd={() => { setSideDrag(null); setSideSlot(null); }} onClick={() => open(v.id)}>
                         <CardBusy data={data} v={v} />
@@ -1031,7 +1108,7 @@ function Calendar({ data, videos, open, detailsOpen, closeDetails }: { data: Dat
 function Ideias({ data, filter, open }: { data: Data; filter: Filter; open: (id: string) => void }) {
   if (!data.boot) return null;
   const series = data.boot.series.filter((s) => filter === "todos" || s.format === filter).sort((a, b) => (a.format === "longo" ? 0 : 1) - (b.format === "longo" ? 0 : 1) || a.position - b.position);
-  const add = async (s: Series) => { const v = await api.create({ title: "Nova ideia", format: s.format, series_id: s.id }); await data.reload(); open(v.id); };
+  const add = (s: Series) => open(data.create({ title: t("Nova ideia"), format: s.format, series_id: s.id }));
   return (
     <div className="ideias">
       {series.map((s) => {
@@ -1047,7 +1124,7 @@ function Ideias({ data, filter, open }: { data: Data; filter: Filter; open: (id:
               </>)}
             </div>
             <div className="serie-cards">
-              {items.map((v) => <Card key={v.id} data={data} v={v} sel={false} onClick={() => open(v.id)} />)}
+              {items.map((v) => <Card key={data.stable(v.id)} data={data} v={v} sel={false} onClick={() => open(v.id)} />)}
               <button className="newidea" onClick={() => add(s)}>{t("+ Nova ideia")}</button>
             </div>
           </div>
