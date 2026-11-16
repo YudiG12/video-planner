@@ -2,6 +2,7 @@
 
 One line per merged PR (newest first). Each links to a release with the verify GIF and screenshots.
 
+- 2026-11-16 · **Inline, animated delete confirmation** ([#32](https://github.com/YudiG12/video-planner/pull/32) · [release with GIF/screens](https://github.com/YudiG12/video-planner/releases/tag/pr-32))
 - 2026-11-16 · **New idea and new video appear instantly** ([#31](https://github.com/YudiG12/video-planner/pull/31) · [release with GIF/screens](https://github.com/YudiG12/video-planner/releases/tag/pr-31))
 - 2026-11-16 · **Sponsor logo stays inside the card at any width** ([#30](https://github.com/YudiG12/video-planner/pull/30) · [release with GIF/screens](https://github.com/YudiG12/video-planner/releases/tag/pr-30))
 - 2026-11-16 · **Derivative checkboxes don't affect each other** ([#29](https://github.com/YudiG12/video-planner/pull/29) · [release with GIF/screens](https://github.com/YudiG12/video-planner/releases/tag/pr-29))
