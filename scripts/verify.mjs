@@ -652,6 +652,60 @@ await check("motion: loading shows a skeleton, not a blank page", async () => {
   await p.screenshot({ path: `${OUT}/motion-skeleton.png` });
   await p.locator(".kanban").waitFor({ timeout: 5000 }); await ctx.close();
 });
+// "+ New idea" / "+ New video" show the card and open its details at once (temporary id), the create runs behind.
+// The server is slowed down here so "at once" can't be the server answering fast.
+const instantCreate = async (path, button, typed, blurEarly) => {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } }); await offline(ctx);
+  const p = await ctx.newPage(); let id;
+  try {
+    await p.route("**/api/videos", async (r) => { if (r.request().method() !== "POST") return r.continue(); await new Promise((x) => setTimeout(x, 1200)); await r.continue(); });
+    await p.goto(`${BASE}/${path}`, { waitUntil: "networkidle" });
+    const answered = p.waitForResponse((r) => r.url().endsWith("/api/videos") && r.request().method() === "POST"); answered.catch(() => {});
+    // time from the click until both are in the page (watched on every DOM change, not once per frame)
+    const ms = await p.evaluate((sel) => new Promise((res) => {
+      const ok = () => document.querySelector('.card[data-id^="tmp-"]') && document.querySelector("aside.panel .title-in");
+      const t0 = performance.now();
+      const mo = new MutationObserver(() => { if (ok()) { mo.disconnect(); res(performance.now() - t0); } });
+      mo.observe(document.body, { childList: true, subtree: true });
+      document.querySelector(sel).click();
+      if (ok()) { mo.disconnect(); res(performance.now() - t0); }
+      setTimeout(() => { mo.disconnect(); res(-1); }, 3000);
+    }), button);
+    assert(ms >= 0 && ms < 100, `card + details took ${ms.toFixed(0)} ms (want < 100)`);
+    if (path === "ideias") await p.screenshot({ path: `${OUT}/instant-create.png` });
+    const ta = p.locator("aside.panel .title-in"); const el = await ta.elementHandle();
+    await ta.click(); await p.keyboard.press("ControlOrMeta+a"); await p.keyboard.type(typed);
+    assert(await p.locator('.card[data-id^="tmp-"]').count() >= 1, "server answered before the typing finished (test too slow)");
+    if (blurEarly) await p.evaluate(() => document.activeElement?.blur());
+    id = (await (await answered).json()).id; await p.waitForTimeout(400);
+    assert(await p.locator('.card[data-id^="tmp-"]').count() === 0 && await p.locator(`.card[data-id="${id}"]`).count() >= 1, "real id not swapped in");
+    assert(await el.evaluate((e) => e.isConnected), "details panel re-mounted when the real id arrived (flicker)");
+    assert(await ta.inputValue() === typed, `typed title lost: "${await ta.inputValue()}"`);
+    if (!blurEarly) { assert(await el.evaluate((e) => e === document.activeElement), "title lost focus when the server answered"); await p.evaluate(() => document.activeElement?.blur()); }
+    for (let i = 0; i < 20 && (await api(`/api/videos/${id}`)).body?.title !== typed; i++) await p.waitForTimeout(150);
+    const g = (await api(`/api/videos/${id}`)).body; assert(g.title === typed, `saved title "${g.title}"`);
+    await p.reload({ waitUntil: "networkidle" }); assert(await p.locator(`.card[data-id="${id}"]`).count() >= 1, "created video missing after reload");
+  } finally { await ctx.close(); if (id) await api(`/api/videos/${id}`, { method: "DELETE" }); }
+};
+await check("ui: + New idea shows the card with its details open in < 100 ms; the title typed right away is kept after the server answers", () => instantCreate("ideias", ".newidea", "Instant idea verify", false));
+await check("ui: + New video shows the card with its details open in < 100 ms; a title typed and left before the server answers is saved", () => instantCreate("kanban", ".topbar .btn-dark", "Instant video verify", true));
+await check("ui: a failed create (500) removes the temporary card and shows an error toast", async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } }); await offline(ctx);
+  const p = await ctx.newPage();
+  try {
+    const before = (await api("/api/videos")).body.length;
+    await p.route("**/api/videos", async (r) => { if (r.request().method() !== "POST") return r.continue(); await new Promise((x) => setTimeout(x, 500)); await r.fulfill({ status: 500, contentType: "application/json", body: '{"error":"boom"}' }); });
+    await p.goto(`${BASE}/kanban`, { waitUntil: "networkidle" });
+    await p.locator(".topbar .btn-dark").click();
+    await p.locator('.card[data-id^="tmp-"]').first().waitFor({ timeout: 100 });
+    await p.locator(".toast-err").waitFor({ timeout: 3000 });
+    await p.screenshot({ path: `${OUT}/create-failed.png` });
+    assert(await p.locator('.card[data-id^="tmp-"]').count() === 0, "temporary card still on screen");
+    assert(await p.locator("aside.panel").count() === 0, "details of the failed video still open");
+    assert((await api("/api/videos")).body.length === before, "something was created");
+    await p.waitForTimeout(4300); assert(await p.locator(".toast-err").count() === 0, "error toast doesn't go away");
+  } finally { await ctx.close(); }
+});
 await check("ui: record motion (motion.gif)", async () => {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, recordVideo: { dir: `${OUT}/video-motion`, size: { width: 1280, height: 800 } } });
   await offline(ctx); const p = await ctx.newPage();
