@@ -413,6 +413,43 @@ await check("ui: full-screen video page", async () => {
   await page.locator(".full-top").waitFor({ timeout: 5000 });
   await page.screenshot({ path: `${OUT}/video-full.png`, fullPage: true });
 });
+// Narrow cards (details panel open): the sponsor logo stays inside its card on the Recent strip, the kanban and the calendar.
+// The demo sponsor has no logo, so this page sees one on it and every video gets that sponsor (only in this browser, the DB is untouched).
+await check("ui: sponsor logo stays inside the card with the details panel open (1280 and 1024 px; Recent, kanban, calendar)", async () => {
+  const logo = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22"><rect width="22" height="22" rx="3" fill="#D6336C"/><text x="11" y="15" font-size="11" font-family="sans-serif" font-weight="700" fill="#fff" text-anchor="middle">A</text></svg>');
+  for (const w of [1280, 1024]) {
+    const ctx = await browser.newContext({ viewport: { width: w, height: 800 } }); await offline(ctx);
+    await ctx.route(`${BASE}/api/bootstrap`, async (r) => { const res = await r.fetch(); const j = await res.json(); r.fulfill({ response: res, json: { ...j, sponsors: j.sponsors.map((s) => ({ ...s, logo })) } }); });
+    await ctx.route((u) => u.pathname === "/api/videos", async (r) => {
+      if (r.request().method() !== "GET") return r.continue();
+      const res = await r.fetch(); const j = await res.json(); const sp = (await api("/api/bootstrap")).body.sponsors[0].id;
+      r.fulfill({ response: res, json: j.map((v) => ({ ...v, sponsor_id: sp })) });
+    });
+    const p = await ctx.newPage();
+    try {
+      for (const view of ["kanban", "calendario"]) {
+        await p.goto(`${BASE}/${view}`, { waitUntil: "networkidle" });
+        await p.locator(view === "kanban" ? ".kanban .card" : ".grid .chip").first().click();
+        await p.locator("aside.panel").waitFor({ timeout: 5000 }); await p.waitForTimeout(700);
+        const res = await p.evaluate(() => [...document.querySelectorAll(".card img.logo, .chip img.logo")].filter((i) => !i.closest(".panel")).map((i) => {
+          const c = i.closest(".card, .chip").getBoundingClientRect(), b = i.getBoundingClientRect();
+          return { where: i.closest(".recent") ? "recent" : i.closest(".kanban") ? "kanban" : "calendar", w: b.width,
+            inside: b.left >= c.left - 0.5 && b.right <= c.right + 0.5 && b.top >= c.top - 0.5 && b.bottom <= c.bottom + 0.5 };
+        }));
+        for (const where of view === "kanban" ? ["recent", "kanban"] : ["calendar"]) {
+          const these = res.filter((x) => x.where === where);
+          assert(these.length > 0, `${w}px ${where}: no sponsor logos rendered`);
+          const out = these.filter((x) => !x.inside);
+          assert(out.length === 0, `${w}px ${where}: ${out.length}/${these.length} sponsor logos outside their card`);
+          assert(these.every((x) => x.w > 0), `${w}px ${where}: a sponsor logo shrank to nothing`);
+        }
+        if (view === "kanban" && w === 1280) await p.screenshot({ path: `${OUT}/recent-panel-open.png` });
+        if (view === "kanban" && w === 1024) await p.screenshot({ path: `${OUT}/recent-panel-open-1024.png` });
+        if (view === "calendario" && w === 1024) await p.screenshot({ path: `${OUT}/calendar-panel-open-1024.png` });
+      }
+    } finally { await ctx.close(); }
+  }
+});
 // Calendar side panel: unscheduled videos, drag in to schedule, drag back out to clear the date
 const calSide = async (pg, shots) => {
   const c = await api("/api/videos", { method: "POST", body: JSON.stringify({ title: "Unscheduled verify video", format: "longo" }) }); const id = c.body.id;

@@ -315,7 +315,7 @@ function CardMeta({ data, v, small }: { data: Data; v: Video; small?: boolean })
     <div className="card-meta">
       <div className="fmt">{v.format === "longo" ? <I.YT w={small ? 15 : 18} /> : <I.IG s={small ? 12 : 14} />}</div>
       <div className="tagwrap">{s?.logo ? <span className="tag-logo" title={s.name}><img src={s.logo} alt={s.name} /></span> : s && <span className="tag" style={{ background: s.bg, color: s.color }}>{small ? s.name : tagText(s, v)}</span>}</div>
-      {!small && v.publish_date && <span className="mono" style={{ fontSize: 11, color: "var(--muted)", flexShrink: 0, marginLeft: "auto" }}>{new Date(v.publish_date + "T12:00").toLocaleDateString(dateLocale(), { day: "numeric", month: "short" }).replace(".", "")}</span>}
+      {!small && v.publish_date && <span className="mono card-date">{new Date(v.publish_date + "T12:00").toLocaleDateString(dateLocale(), { day: "numeric", month: "short" }).replace(".", "")}</span>}
       {sp?.logo && <img className="logo" src={sp.logo} alt={sp.name} title={sp.name} />}
     </div>
   );

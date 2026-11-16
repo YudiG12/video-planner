@@ -42,6 +42,15 @@ input,textarea{font:inherit;color:var(--ink-strong)}
 .tagwrap{flex:1;min-width:0;display:flex;overflow:hidden}
 .tag{display:block;max-width:100%;padding:2px 6px;border-radius:var(--r);font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .logo{width:22px;height:22px;border-radius:var(--r);flex-shrink:0;object-fit:cover}
+/* Narrow cards (details panel open, small window): everything stays inside the card.
+   The date and the format icon give way first, the sponsor logo shrinks last. */
+.card-meta{min-width:0}
+.card-meta .fmt{flex:0 1000 18px;min-width:0;overflow:hidden}
+.card-date{flex:0 1000 auto;min-width:0;margin-left:auto;overflow:hidden;white-space:nowrap;font-size:11px;color:var(--muted)}
+.card-meta .logo{flex:0 1 22px;min-width:0}
+/* very narrow card: drop the date instead of showing a clipped letter */
+.card{container-type:inline-size}
+@container (max-width:150px){.card-date{display:none}}
 
 .panel{width:620px;flex-shrink:0;border-left:1px solid var(--line-strong);overflow:auto;padding:32px 40px;display:flex;flex-direction:column;gap:26px}
 .panel-top{display:flex;justify-content:space-between;align-items:center}
@@ -123,6 +132,7 @@ select,input[type=date]{border:1px solid var(--line);border-radius:var(--r);padd
 .chip .card-meta{height:18px;gap:5px}
 .chip .tag{font-size:10px;padding:1px 5px}
 .chip .logo{width:18px;height:18px}
+.chip .card-meta .logo{flex-basis:18px}
 
 .ideias{display:flex;gap:24px;padding:32px;overflow:auto;align-items:flex-start}
 .serie-col{width:240px;flex-shrink:0;display:flex;flex-direction:column;gap:14px}
