@@ -230,10 +230,16 @@ select,input[type=date]{border:1px solid var(--line);border-radius:var(--r);padd
 .serie-h p{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .opts{position:relative}
 .opts-btn{width:auto!important;padding:0 10px;font-size:12px;font-weight:600;color:var(--ink-muted)}
-.opts-pop{position:absolute;right:0;top:calc(100% + 6px);z-index:20;background:#fff;border:1px solid var(--line-strong);border-radius:var(--r);padding:6px;min-width:220px}
+.opts-pop{position:absolute;right:0;top:calc(100% + 6px);z-index:20;background:#fff;border:1px solid var(--line-strong);border-radius:var(--r);padding:6px}
 .opts-del{width:100%;text-align:left;background:none;border:0;padding:8px 10px;border-radius:var(--r);color:#B83A31;font-weight:600;font-size:13px;cursor:pointer}
 .opts-del:hover{background:#FBE6E3}
-.opts-confirm{display:flex;flex-direction:column;gap:10px;padding:6px;font-size:13px;color:var(--ink);width:260px}
+.opts-row{width:208px;border-radius:var(--r);overflow:hidden;transition:width var(--d-ui) var(--ease-out),background-color var(--d-ui) var(--ease-out)}
+.opts-row.is-confirm{width:252px;background:#FBE6E3}
+.opts-confirm{display:flex;flex-direction:column;gap:8px;padding:8px 10px;font-size:13px;color:var(--ink)}
+.opts-q{color:#B83A31;font-weight:600;overflow-wrap:anywhere}
+.opts-q b{color:var(--ink-strong)}
+.opts-acts{display:flex;gap:8px;justify-content:flex-end}
+.opts-acts .btn-ghost{background:#fff;padding:6px 10px}
 .btn-danger{font-size:12px;font-weight:700;color:#fff;background:#B83A31;border:0;border-radius:var(--r);padding:6px 12px;cursor:pointer}
 .full-top{display:flex;align-items:center;gap:8px}
 .day{transition:background .2s}
@@ -458,6 +464,8 @@ button:active:not(:disabled){transform:scale(.96)}
 .day{transition:background var(--d-press),box-shadow var(--d-press)}
 .meta-pop,.opts-pop{transform-origin:top left;animation:pop-in 140ms var(--ease-out)}
 .opts-pop{transform-origin:top right}
+.opts-confirm{animation:del-morph var(--d-ui) var(--ease-out)}
+@keyframes del-morph{from{max-height:34px;opacity:.3}to{max-height:160px;opacity:1}}
 @keyframes pop-in{from{opacity:0;transform:scale(.96) translateY(-4px)}}
 .cb{transition:background var(--d-press),border-color var(--d-press),transform var(--d-press)}
 .cb.on{animation:cb-pop 260ms var(--ease-spring)}
