@@ -4,6 +4,7 @@ import * as I from "./icons";
 import { t, tAction, dateLocale, weekdays, setLocale } from "./i18n";
 import { Field } from "./editor";
 import { DiffText } from "./diff";
+import { useFlip, Count, celebrate, useFlash } from "./motion";
 
 type View = "kanban" | "calendario" | "derivados" | "ideias";
 type Filter = "todos" | Format;
@@ -26,6 +27,16 @@ function useData() {
     setConflictsState(cref.current);
   };
   const vref = useRef(videos); vref.current = videos;
+  const [saved, setSaved] = useState<Record<string, number>>({}); // own saves per block, to flash "saved"
+  // Delete waits 5 s behind an "Undo" toast; the video disappears at once
+  const [trash, setTrash] = useState<{ v: Video; timer: number } | null>(null);
+  const removeLater = (v: Video) => {
+    if (trash) { window.clearTimeout(trash.timer); api.remove(trash.v.id); }
+    setVideos((vs) => vs.filter((x) => x.id !== v.id));
+    const timer = window.setTimeout(() => { api.remove(v.id).then(() => reload()); setTrash(null); }, 5000);
+    setTrash({ v, timer });
+  };
+  const undoRemove = () => { if (!trash) return; window.clearTimeout(trash.timer); setVideos((vs) => [...vs, trash.v].sort((a, b) => a.position - b.position)); setTrash(null); };
   const queue = useRef<Record<string, Promise<unknown>>>({});
   const advanced = useRef<Record<string, Record<number, number>>>({}); // own saves: base -> new version
   const pending = useRef<Record<string, number>>({}); // blocks with a save in flight: a re-read must not undo them
@@ -56,6 +67,7 @@ function useData() {
     if (r.version !== b) (advanced.current[key] ||= {})[b] = r.version;
     setConflict(key, null);
     setVideos((vs) => vs.map((v) => (v.id === id ? { ...v, script_versions: { ...v.script_versions, [block]: r.version } } : v)));
+    setSaved((x) => ({ ...x, [key]: (x[key] || 0) + 1 }));
   };
   // Save one block with the version it was based on. A save based on a version that our own previous save replaced is
   // moved forward (our edits build on each other); anything else conflicts.
@@ -92,7 +104,7 @@ function useData() {
     return nv;
   };
   const live = useLive({ videos: vref, merge, setVideos, loadBoot });
-  return { boot, videos, setVideos, reload, patch, saveBlock, conflicts, resolve, ...live };
+  return { boot, videos, setVideos, reload, patch, saveBlock, conflicts, resolve, saved, trash, removeLater, undoRemove, ...live };
 }
 
 // ---------- live updates (/api/live) ----------
@@ -219,6 +231,7 @@ export default function App() {
 
   const full = hash.match(/^#\/video\/(.+)$/)?.[1];
   const shown = data.videos.filter((v) => filter === "todos" || v.format === filter);
+  useFlip(data.videos);
 
   const novo = async () => {
     const format: Format = filter === "vertical" ? "vertical" : "longo";
@@ -248,16 +261,23 @@ export default function App() {
           <button className="btn-dark" onClick={novo}>{t("+ Novo vídeo")}</button>
         </div>
       </div>
-      <div className="body" onMouseDown={(e) => {
+      <div className="body view-in" key={view} onMouseDown={(e) => {
         // clicking outside the panel (and outside a card) closes it
         if (openId && !(e.target as HTMLElement).closest(".panel, .card, .chip, .idea, .drow .link")) setOpenId(null);
       }}>
-        {view === "kanban" && <Kanban data={data} videos={shown} openId={openId} setOpenId={setOpenId} closing={closing} />}
+        {!data.boot && <div className="skel-board" aria-busy="true" aria-label={t("Carregando")}>{[0, 1, 2, 3, 4].map((i) => <div key={i} className="skel-col"><div className="skel" style={{ height: 14, width: "50%" }} />{[0, 1, 2].slice(0, 3 - (i % 2)).map((j) => <div key={j} className="skel" style={{ height: 76 }} />)}</div>)}</div>}
+        {data.boot && view === "kanban" && <Kanban data={data} videos={shown} openId={openId} setOpenId={setOpenId} closing={closing} />}
         {view === "calendario" && <Calendar data={data} videos={shown} open={setOpenId} detailsOpen={!!openId} closeDetails={() => setOpenId(null)} />}
         {view === "derivados" && <Derivados data={data} open={setOpenId} />}
         {view === "ideias" && <Ideias data={data} filter={filter} open={(id) => { setOpenId(id); }} />}
         {openId && view !== "kanban" && <Panel data={data} id={openId} closing={closing} close={() => setOpenId(null)} />}
       </div>
+      {data.trash && (
+        <div className="toast" role="status">
+          <span>{t("Apagado")}: <b>{data.trash.v.title}</b></span>
+          <button className="toast-undo" onClick={data.undoRemove}>{t("Desfazer")}</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -295,7 +315,7 @@ function Options({ data, v, after }: { data: Data; v: Video; after: () => void }
               <span>{t("Apagar")} <b>{v.title}</b>? {t("Não dá pra desfazer.")}</span>
               <div style={{ display: "flex", gap: 8 }}>
                 <button className="btn-ghost" onClick={() => { setConfirm(false); setOpen(false); }}>{t("Cancelar")}</button>
-                <button className="btn-danger" onClick={async () => { await api.remove(v.id); setOpen(false); after(); data.reload(); }}>{t("Apagar")}</button>
+                <button className="btn-danger" onClick={() => { setOpen(false); after(); data.removeLater(v); }}>{t("Apagar")}</button>
               </div>
             </div>
           )}
@@ -326,7 +346,7 @@ function Content({ sc, sp, set, ver, cf, lc, fp }: { sc: any; sp: any; set: (b: 
     set("conteudo", join(all.slice(0, k).join("\n"), all.slice(k).join("\n"), true));
   };
   const ins = sp && (
-    <div className={"ins" + lc("insercao")}>
+    <div className={"ins" + lc("insercao")} data-flip="ins">
       {sp.logo && <img className="logo" style={{ width: 26, height: 26 }} src={sp.logo} alt="" />}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -355,8 +375,8 @@ const CardBusy = ({ data, v }: { data: Data; v: Video }) => agentEditing(data, v
   ? <span className="agent-badge card-badge" role="status" aria-label={t("Claude está editando…")}><i /><i /><i />Claude</span> : null;
 function Card({ data, v, sel, onClick, noDrag }: { data: Data; v: Video; sel: boolean; onClick: () => void; noDrag?: boolean }) {
   return (
-    <div className={`card ${v.format === "vertical" ? "ig" : ""} ${sel ? "sel" : ""}${agentEditing(data, v.id) ? " agent-editing" : ""}`} data-id={v.id} draggable={!noDrag}
-      onDragStart={(e) => { e.dataTransfer.setData("text/plain", v.id); e.dataTransfer.effectAllowed = "move"; window.dispatchEvent(new CustomEvent("vp-drag", { detail: v.id })); }}
+    <div className={`card ${v.format === "vertical" ? "ig" : ""} ${sel ? "sel" : ""}${agentEditing(data, v.id) ? " agent-editing" : ""}`} data-id={v.id} data-flip={noDrag ? undefined : v.id} draggable={!noDrag}
+      onDragStart={(e) => { const el = e.currentTarget; el.classList.add("lift"); requestAnimationFrame(() => el.classList.remove("lift")); e.dataTransfer.setData("text/plain", v.id); e.dataTransfer.effectAllowed = "move"; window.dispatchEvent(new CustomEvent("vp-drag", { detail: v.id })); }}
       onDragEnd={() => window.dispatchEvent(new CustomEvent("vp-drag", { detail: null }))} onClick={onClick}>
       {data.dots[v.id] && !agentEditing(data, v.id) && <span className="dot-changed" title={t("Alterado pelo Claude")} aria-label={t("Alterado pelo Claude")} />}
       <CardBusy data={data} v={v} />
@@ -399,6 +419,7 @@ function Kanban({ data, videos, openId, setOpenId, closing }: { data: Data; vide
     const position = prev == null && next == null ? 1 : prev == null ? next! - 1 : next == null ? prev + 1 : (prev + next) / 2;
     data.setVideos((vs) => vs.map((v) => (v.id === id ? { ...v, status: slot.st, position } : v)).sort((a, b) => a.position - b.position));
     end();
+    if (slot.st === "Finalizado" && videos.find((v) => v.id === id)?.status !== "Finalizado") requestAnimationFrame(() => celebrate(document.querySelector(`[data-flip="${id}"]`)));
     await api.move(id, slot.st, position); data.reload();
   };
   return (
@@ -420,7 +441,7 @@ function Kanban({ data, videos, openId, setOpenId, closing }: { data: Data; vide
             <div key={st} style={{ background: COL_BG[st] }} className={"col" + (slot?.st === st ? " drop" : "")}
               onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; slotAt(st, e); }}
               onDrop={drop}>
-              <div className="col-h">{COL_ICONS[st]}<b>{t(st)}</b><span>{all}</span></div>
+              <div className="col-h">{COL_ICONS[st]}<b>{t(st)}</b><Count n={all} /></div>
               {(() => { let i = 0; const out: any[] = [];
                 videos.filter((v) => v.status === st).forEach((v) => {
                   if (v.id === drag) { out.push(<div key={v.id} className="dragging-src"><Card data={data} v={v} sel={false} onClick={() => {}} /></div>); return; }
@@ -463,8 +484,10 @@ function Panel({ data, id, close, closing }: { data: Data; id: string; close: ()
           <button className="iconbtn" onClick={close} title={t("Fechar")}><I.IX /></button>
         </div>
       </div>
-      <TitleInput data={data} v={v} />
-      <Script data={data} v={v} />
+      <div className="panel-swap" key={v.id}>
+        <TitleInput data={data} v={v} />
+        <Script data={data} v={v} />
+      </div>
     </aside>
   );
 }
@@ -565,6 +588,11 @@ function ConflictNote({ data, v, block }: { data: Data; v: Video; block: string 
     </div>
   );
 }
+// "Saved" flashes in the block's corner after each of your saves
+function SavedTick({ n, block }: { n: number; block: string }) {
+  const on = useFlash(n);
+  return on ? <span className="saved-tick" data-block={block} role="status"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M5 12l5 5 9-10" /></svg>{t("salvo")}</span> : null;
+}
 // The agent is editing this block (animated highlight), or changed it: inserted text marked, removed text struck through
 function LiveNote({ data, v, block }: { data: Data; v: Video; block: string }) {
   const key = `${v.id}:${block}`;
@@ -590,7 +618,7 @@ function Script({ data, v: v0 }: { data: Data; v: Video }) {
   const sp = sponsorOf(data.boot, v);
   const sc = v.script || {};
   const ver = (block: string) => v.script_versions?.[block] ?? 0;
-  const cf = (block: string) => <><LiveNote data={data} v={v} block={block} /><ConflictNote data={data} v={v} block={block} /></>;
+  const cf = (block: string) => <><LiveNote data={data} v={v} block={block} /><ConflictNote data={data} v={v} block={block} /><SavedTick n={data.saved[`${v.id}:${block}`] || 0} block={block} /></>;
   // classes for a block's box while the agent edits it / after it changed it
   const lc = (...blocks: string[]) => {
     const keys = blocks.map((b) => `${v.id}:${b}`);
@@ -786,7 +814,7 @@ function FullScreen({ data, id }: { data: Data; id: string }) {
           <div className="side">
             <div className="box">
               <label className="field"><span>{t("Status")}</span>
-                <select value={v.status} onChange={(e) => data.patch(v.id, { status: e.target.value })}>{data.boot.statuses.map((s) => <option key={s} value={s}>{t(s)}</option>)}</select></label>
+                <select value={v.status} onChange={(e) => { if (e.target.value === "Finalizado" && v.status !== "Finalizado") celebrate(e.target as unknown as Element); data.patch(v.id, { status: e.target.value }); }}>{data.boot.statuses.map((s) => <option key={s} value={s}>{t(s)}</option>)}</select></label>
               <label className="field"><span>{t("Publicação")}</span>
                 <input type="date" value={v.publish_date || ""} onChange={(e) => data.patch(v.id, { publish_date: e.target.value || null })} /></label>
               <label className="field"><span>{t("Série")}</span>
@@ -905,7 +933,7 @@ function Calendar({ data, videos, open, detailsOpen, closeDetails }: { data: Dat
       <div className="cal-top">
         <div className="grid dows">{weekdays().map((d) => <div className="dow" key={d}>{d}</div>)}</div>
         <div className="filters"><button onClick={() => box.current?.querySelector(".mon.cur")?.scrollIntoView({ behavior: "smooth", block: "start" })}>{t("Hoje")}</button>
-          <button className={"side-toggle" + (side && !detailsOpen ? " on" : "")} aria-expanded={side && !detailsOpen} aria-controls="cal-side" onClick={toggleSide}>{t("Sem data")} <span className="mono">{unscheduled.length}</span></button></div>
+          <button className={"side-toggle" + (side && !detailsOpen ? " on" : "")} aria-expanded={side && !detailsOpen} aria-controls="cal-side" onClick={toggleSide}>{t("Sem data")} <Count className="mono" n={unscheduled.length} /></button></div>
       </div>
       <div ref={top} style={{ height: 1 }} />
       <div className="grid">
@@ -922,7 +950,7 @@ function Calendar({ data, videos, open, detailsOpen, closeDetails }: { data: Dat
                 onDragOver={(e) => { e.preventDefault(); setOver(k); }} onDragLeave={() => setOver(null)} onDrop={(e) => drop(k, e)}>
                 <span className="n">{day === 1 ? <b className="mlabel">{label(d)}</b> : null}{k === today ? `${day} · ${t("hoje")}` : day}</span>
                 {(byDate[k] || []).map((v) => (
-                  <div key={v.id} className={"chip" + (v.format === "vertical" ? " ig" : "") + (agentEditing(data, v.id) ? " agent-editing" : "")} data-id={v.id} draggable onDragStart={(e) => e.dataTransfer.setData("text/plain", v.id)} onClick={() => open(v.id)}>
+                  <div key={v.id} className={"chip" + (v.format === "vertical" ? " ig" : "") + (agentEditing(data, v.id) ? " agent-editing" : "")} data-id={v.id} data-flip={v.id} draggable onDragStart={(e) => e.dataTransfer.setData("text/plain", v.id)} onClick={() => open(v.id)}>
                     <CardBusy data={data} v={v} />
                     <span className="chip-t">{v.title}</span>
                     <CardMeta data={data} v={v} small />
@@ -942,7 +970,7 @@ function Calendar({ data, videos, open, detailsOpen, closeDetails }: { data: Dat
         onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setSideOver(true); if (!(e.target as HTMLElement).closest(".side-group")) setSideSlot(null); }}
         onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setSideOver(false); }} onDrop={unschedule}>
         <div className="cal-side-h">
-          <span className="eb">{t("Sem data")} · <span className="mono">{unscheduled.length}</span></span>
+          <span className="eb">{t("Sem data")} · <Count className="mono" n={unscheduled.length} /></span>
           <button className="x" aria-label={t("Fechar")} onClick={toggleSide}>×</button>
         </div>
         <div className="cal-side-list">
@@ -952,12 +980,12 @@ function Calendar({ data, videos, open, detailsOpen, closeDetails }: { data: Dat
             const slotHere = sideSlot?.st === st ? sideSlot.i : -1;
             return (
               <section key={st} className="side-group" data-st={st} onDragOver={(e) => { e.preventDefault(); sideSlotAt(st, e); }}>
-                <div className="side-group-h">{t(st)} <span className="mono">{items.length}</span></div>
+                <div className="side-group-h">{t(st)} <Count className="mono" n={items.length} /></div>
                 <div className="side-group-list">
                   {items.map((v) => { const i = v.id === sideDrag ? -1 : j++; return (
                     <Fragment key={v.id}>
                       {slotHere === i && <div className="side-slot" />}
-                      <div className={"chip" + (v.format === "vertical" ? " ig" : "") + (v.id === sideDrag ? " dragging" : "") + (agentEditing(data, v.id) ? " agent-editing" : "")} data-id={v.id} draggable
+                      <div className={"chip" + (v.format === "vertical" ? " ig" : "") + (v.id === sideDrag ? " dragging" : "") + (agentEditing(data, v.id) ? " agent-editing" : "")} data-id={v.id} data-flip={v.id} draggable
                         onDragStart={(e) => { e.dataTransfer.setData("text/plain", v.id); e.dataTransfer.effectAllowed = "move"; setTimeout(() => setSideDrag(v.id), 0); }}
                         onDragEnd={() => { setSideDrag(null); setSideSlot(null); }} onClick={() => open(v.id)}>
                         <CardBusy data={data} v={v} />
@@ -1012,6 +1040,9 @@ function Ideias({ data, filter, open }: { data: Data; filter: Filter; open: (id:
 function Derivados({ data, open }: { data: Data; open: (id: string) => void }) {
   const rows = data.videos.filter((v) => v.format === "longo" && v.status === "Finalizado").sort((a, b) => (b.publish_date || "").localeCompare(a.publish_date || ""));
   const cols = DERIV_LONGO;
+  // rows that became complete while on screen get a short green glow (not on load)
+  const prevF = useRef<Record<string, number>>({}), justDone = useRef<Set<string>>(new Set());
+  useEffect(() => { for (const v of rows) prevF.current[v.id] = cols.filter(([k]) => !v.derivatives[k]).length; });
   if (!rows.length) return <div className="empty">{t("Nenhum vídeo longo finalizado ainda.")}</div>;
   return (
     <div className="deriv">
@@ -1023,7 +1054,7 @@ function Derivados({ data, open }: { data: Data; open: (id: string) => void }) {
         const keys = cols.map(([k]) => k).filter((k) => k !== "journal" || tecnico);
         const falta = keys.filter((k) => !v.derivatives[k]).length;
         return (
-          <div className="drow" key={v.id}>
+          <div className={"drow" + ((falta === 0 && (prevF.current[v.id] ?? 0) > 0) || justDone.current.has(v.id) ? (justDone.current.add(v.id), " done") : "")} key={v.id}>
             <span className="name link" title={t("Abrir detalhes")} onClick={() => open(v.id)}><I.YT /><span className="tt">{v.title}</span>{s && <span className="tag" style={{ background: s.bg, color: s.color }}>{s.name}</span>}</span>
             <span className="d mono">{v.publish_date ? new Date(v.publish_date + "T12:00").toLocaleDateString(dateLocale(), { day: "numeric", month: "short" }).replace(".", "") : "—"}</span>
             {cols.map(([k]) => (

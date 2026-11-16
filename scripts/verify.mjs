@@ -505,6 +505,81 @@ await check("ui: record calendar side panel (calendar-side.gif)", async () => {
   const vid = await p.video().path(); await ctx.close();
   try { execSync(`ffmpeg -y -loglevel error -i ${vid} -vf "fps=8,scale=900:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse" ${OUT}/calendar-side.gif`); } catch { console.log("      (ffmpeg not found: kept webm only)"); }
 });
+// ---- Motion (src/motion.tsx): fast feedback, movement that explains, undo, reduced motion ----
+const motion = async (pg, { shots = false } = {}) => {
+  const mk = async (title, status = "Esse mês") => (await api("/api/videos", { method: "POST", body: JSON.stringify({ title, format: "longo", status }) })).body.id;
+  const id = await mk("Motion verify card");
+  try {
+    await pg.goto(`${BASE}/kanban`, { waitUntil: "networkidle" });
+    const card = pg.locator(`.card[data-flip="${id}"]`); await card.waitFor({ timeout: 5000 });
+    const fin = pg.locator(".col").filter({ has: pg.locator(".col-h", { hasText: /Finalizado|Published/ }) });
+    const before = Number(await fin.locator(".col-h span").last().innerText());
+    await fin.locator(".col-h").scrollIntoViewIfNeeded(); await card.dragTo(fin.locator(".col-h"));
+    // record what happens in the next 700 ms: did the card animate, did confetti appear?
+    const st = await pg.evaluate((id) => new Promise((res) => { const seen = { flip: 0, confetti: 0 }, t0 = performance.now();
+      const tick = () => { seen.flip = Math.max(seen.flip, document.querySelector(`[data-flip="${id}"]`)?.getAnimations().length || 0); seen.confetti = Math.max(seen.confetti, document.querySelectorAll(".confetti").length);
+        performance.now() - t0 < 700 ? requestAnimationFrame(tick) : res(seen); }; tick(); }), id);
+    if (shots) await pg.screenshot({ path: `${OUT}/motion-finalized.png` });
+    assert(st.flip > 0, "card didn't slide to its new column"); assert(st.confetti > 0, "no confetti when it reached Finalizado");
+    await pg.waitForTimeout(700);
+    assert(Number(await fin.locator(".col-h span").last().innerText()) === before + 1, "column counter didn't update");
+    // delete → toast with Undo → undo keeps the video
+    await card.click(); await pg.locator("aside.panel .opts-btn").click();
+    await pg.locator(".opts-del").click(); await pg.locator(".opts-confirm .btn-danger").click();
+    await pg.locator(".toast").waitFor({ timeout: 2000 });
+    assert(await pg.locator(`.card[data-flip="${id}"]`).count() === 0, "deleted card still on the board");
+    if (shots) await pg.screenshot({ path: `${OUT}/motion-undo-toast.png` });
+    await pg.locator(".toast-undo").click();
+    await pg.locator(`.card[data-flip="${id}"]`).waitFor({ timeout: 2000 });
+    await pg.waitForTimeout(5500);
+    assert((await api(`/api/videos/${id}`)).status === 200, "video was deleted even after Undo");
+  } finally { await api(`/api/videos/${id}`, { method: "DELETE" }); }
+};
+await check("motion: card slides to its column, confetti on Finalizado, counter bumps, delete has Undo", () => motion(page, { shots: true }));
+await check("motion: feedback under 100 ms (derivative checkbox) and a 'saved' tick after editing a block", async () => {
+  await page.goto(`${BASE}/derivados`, { waitUntil: "networkidle" });
+  const cb = page.locator(".drow:not(.h) .cb:not(.on)").first(); await cb.waitFor({ timeout: 5000 });
+  const ms = await cb.evaluate((el) => new Promise((res) => { const t0 = performance.now(); el.click(); const tick = () => el.classList.contains("on") ? res(performance.now() - t0) : requestAnimationFrame(tick); tick(); }));
+  assert(ms < 100, `checkbox took ${Math.round(ms)} ms to react`);
+  await cb.click(); // undo the change
+  const c = await api("/api/videos", { method: "POST", body: JSON.stringify({ title: "Saved tick verify", format: "longo" }) }); const vid = c.body.id;
+  try {
+    await page.goto(`${BASE}/kanban#/video/${vid}`, { waitUntil: "networkidle" }); await page.reload({ waitUntil: "networkidle" });
+    const ed = page.locator('.block .rt[contenteditable="true"]').last(); await ed.waitFor({ timeout: 5000 });
+    await ed.click(); await page.keyboard.type("A saved line."); await page.evaluate(() => document.activeElement?.blur());
+    await page.locator(".saved-tick").first().waitFor({ timeout: 3000 });
+    await page.screenshot({ path: `${OUT}/motion-saved.png` });
+  } finally { await api(`/api/videos/${vid}`, { method: "DELETE" }); }
+});
+await check("motion: reduced motion = no sliding cards, no confetti", async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" }); await offline(ctx);
+  const p = await ctx.newPage();
+  const id = (await api("/api/videos", { method: "POST", body: JSON.stringify({ title: "Reduced motion card", format: "longo", status: "Esse mês" }) })).body.id;
+  try {
+    await p.goto(`${BASE}/kanban`, { waitUntil: "networkidle" });
+    const fin = p.locator(".col").filter({ has: p.locator(".col-h", { hasText: /Finalizado|Published/ }) });
+    await fin.locator(".col-h").scrollIntoViewIfNeeded(); await p.locator(`.card[data-flip="${id}"]`).dragTo(fin.locator(".col-h")); await p.waitForTimeout(150);
+    const st = await p.evaluate((id) => ({ flip: (document.querySelector(`[data-flip="${id}"]`)?.getAnimations() || []).filter((a) => a.effect?.getKeyframes?.().some((k) => String(k.transform || "").includes("translate"))).length, confetti: document.querySelectorAll(".confetti").length }), id);
+    assert(st.flip === 0 && st.confetti === 0, JSON.stringify(st));
+  } finally { await ctx.close(); await api(`/api/videos/${id}`, { method: "DELETE" }); }
+});
+await check("motion: loading shows a skeleton, not a blank page", async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } }); await offline(ctx);
+  const p = await ctx.newPage();
+  await p.route("**/api/bootstrap", async (r) => { await new Promise((x) => setTimeout(x, 800)); await r.continue(); });
+  await p.goto(`${BASE}/kanban`); await p.locator(".skel-board").waitFor({ timeout: 2000 });
+  await p.screenshot({ path: `${OUT}/motion-skeleton.png` });
+  await p.locator(".kanban").waitFor({ timeout: 5000 }); await ctx.close();
+});
+await check("ui: record motion (motion.gif)", async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, recordVideo: { dir: `${OUT}/video-motion`, size: { width: 1280, height: 800 } } });
+  await offline(ctx); const p = await ctx.newPage();
+  await motion(p);
+  await p.goto(`${BASE}/derivados`, { waitUntil: "networkidle" });
+  const cb = p.locator(".drow:not(.h) .cb:not(.on)").first(); await cb.click(); await p.waitForTimeout(500); await cb.click(); await p.waitForTimeout(400);
+  const vid = await p.video().path(); await ctx.close();
+  try { execSync(`ffmpeg -y -loglevel error -i ${vid} -vf "fps=12,scale=900:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse" ${OUT}/motion.gif`); } catch { console.log("      (ffmpeg not found: kept webm only)"); }
+});
 // the conflict check above makes the browser log its expected 409 response; any other error still fails
 await check("ui: no console errors", async () => { const e = errors.filter((m) => !/status of 409 \(Conflict\)/.test(m)); assert(e.length === 0, e.slice(0, 3).join(" | ")); });
 // ---- GIF of the main flow (needs ffmpeg; skipped if missing) ----
