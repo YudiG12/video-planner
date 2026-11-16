@@ -672,7 +672,7 @@ const instantCreate = async (path, button, typed, blurEarly) => {
       setTimeout(() => { mo.disconnect(); res(-1); }, 3000);
     }), button);
     assert(ms >= 0 && ms < 100, `card + details took ${ms.toFixed(0)} ms (want < 100)`);
-    if (path === "ideias") await p.screenshot({ path: `${OUT}/instant-create.png` });
+    if (path === "ideias") { await p.locator("aside.panel .row").first().waitFor({ timeout: 500 }); await p.screenshot({ path: `${OUT}/instant-create.png` }); }
     const ta = p.locator("aside.panel .title-in"); const el = await ta.elementHandle();
     await ta.click(); await p.keyboard.press("ControlOrMeta+a"); await p.keyboard.type(typed);
     assert(await p.locator('.card[data-id^="tmp-"]').count() >= 1, "server answered before the typing finished (test too slow)");
@@ -710,6 +710,44 @@ await check("ui: a video expanded to full screen while being created follows it 
     for (let i = 0; i < 20 && (await api(`/api/videos/${id}`)).body?.title !== "Full screen verify"; i++) await p.waitForTimeout(150);
     await p.reload({ waitUntil: "networkidle" });
     assert(await p.locator(".full .title-in").inputValue() === "Full screen verify", "full-screen URL doesn't open the video after reload");
+  } finally { await ctx.close(); if (id) await api(`/api/videos/${id}`, { method: "DELETE" }); }
+});
+await check("ui: a live re-read that lands before the create answers doesn't duplicate the new card", async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } }); await offline(ctx);
+  const p = await ctx.newPage(); let id;
+  try {
+    let release; const hold = new Promise((x) => (release = x)); let created;
+    const inserted = new Promise((x) => (created = x));
+    // the server inserts at once; only the answer to this tab is held back
+    await p.route("**/api/videos", async (r) => { if (r.request().method() !== "POST") return r.continue(); const res = await r.fetch(); created((await res.json()).id); await hold; await r.fulfill({ response: res }); });
+    await p.goto(`${BASE}/kanban`, { waitUntil: "networkidle" }); await p.waitForFunction(() => document.documentElement.dataset.live === "on", null, { timeout: 5000 });
+    await p.locator(".topbar .btn-dark").click();
+    id = await inserted;
+    // another client's write -> live event -> this tab re-reads the list (which already has the new video)
+    const other = (await api("/api/videos")).body.find((v) => v.id !== id);
+    await api(`/api/videos/${other.id}`, { method: "PATCH", headers: { "x-client-id": "verify-other" }, body: JSON.stringify({ title: other.title }) });
+    await p.locator(`.kanban .card[data-id="${id}"]`).waitFor({ timeout: 3000 });
+    release(); await p.waitForTimeout(500);
+    const n = await p.locator(`.kanban .card[data-id="${id}"]`).count(), tmp = await p.locator('.card[data-id^="tmp-"]').count();
+    assert(n === 1 && tmp === 0, `${n} kanban cards for the new video, ${tmp} temporary`);
+    assert(await p.locator("aside.panel .title-in").count() === 1, "details closed");
+  } finally { await ctx.close(); if (id) await api(`/api/videos/${id}`, { method: "DELETE" }); }
+});
+await check("ui: deleting a video while it is being created, then Undo, keeps it (card back once the server answers)", async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } }); await offline(ctx);
+  const p = await ctx.newPage(); let id;
+  try {
+    await p.route("**/api/videos", async (r) => { if (r.request().method() !== "POST") return r.continue(); await new Promise((x) => setTimeout(x, 1500)); await r.continue(); });
+    await p.goto(`${BASE}/kanban`, { waitUntil: "networkidle" });
+    const answered = p.waitForResponse((r) => r.url().endsWith("/api/videos") && r.request().method() === "POST"); answered.catch(() => {});
+    await p.locator(".topbar .btn-dark").click();
+    const panel = p.locator("aside.panel"); await panel.locator(".opts-btn").click(); await panel.locator(".opts-del").click(); await panel.locator(".btn-danger").click();
+    await p.locator(".toast-undo").click();
+    assert(await p.locator('.kanban .card[data-id^="tmp-"]').count() === 1, "undo didn't bring the card back");
+    id = (await (await answered).json()).id; await p.waitForTimeout(600);
+    assert(await p.locator(`.kanban .card[data-id="${id}"]`).count() === 1, "video created on the server but no card after Undo");
+    await p.waitForTimeout(5000);
+    assert((await api(`/api/videos/${id}`)).status === 200, "the undone delete still ran");
   } finally { await ctx.close(); if (id) await api(`/api/videos/${id}`, { method: "DELETE" }); }
 });
 await check("ui: a failed create (500) removes the temporary card and shows an error toast", async () => {

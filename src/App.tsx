@@ -40,8 +40,15 @@ function useData() {
     const timer = window.setTimeout(() => { commit(v.id); setTrash(null); }, 5000);
     setTrash({ v, timer });
   };
-  // Undo: stop hiding it and re-read from the server (it was never deleted there), so it can't be duplicated
-  const undoRemove = () => { if (!trash) return; window.clearTimeout(trash.timer); deleting.current.delete(trash.v.id); deleting.current.delete(alias.current[trash.v.id]); setTrash(null); reload(); };
+  // Undo: stop hiding it and re-read from the server (it was never deleted there), so it can't be duplicated.
+  // A video still being created isn't on the server yet: its draft goes back on screen and gets the real id later.
+  const undoRemove = () => {
+    if (!trash) return;
+    const v = trash.v;
+    window.clearTimeout(trash.timer); deleting.current.delete(v.id); deleting.current.delete(alias.current[v.id]); setTrash(null);
+    if (v.id.startsWith(TMP) && !alias.current[v.id] && v.id in creating.current) setVideos((vs) => (vs.some((x) => x.id === v.id) ? vs : [...vs, v]));
+    reload();
+  };
   const queue = useRef<Record<string, Promise<unknown>>>({});
   const advanced = useRef<Record<string, Record<number, number>>>({}); // own saves: base -> new version
   const pending = useRef<Record<string, number>>({}); // blocks with a save in flight: a re-read must not undo them
@@ -162,7 +169,8 @@ function useData() {
     creating.current[tmp] = api.create(fields).then((sv) => {
       alias.current[tmp] = sv.id; born.current[sv.id] = tmp; fresh.current.add(sv.id);
       // server copy, plus whatever was changed here before it answered (those changes are being saved right after)
-      setVideos((vs) => vs.map((v) => {
+      // a re-read that arrived before this answer may already hold the real video: the draft takes its place (one card)
+      setVideos((vs) => vs.filter((v) => v.id !== sv.id || !vs.some((d) => d.id === tmp)).map((v) => {
         if (v.id !== tmp) return v;
         const out: any = { ...sv, script: { ...sv.script, ...v.script }, derivatives: { ...sv.derivatives, ...v.derivatives } };
         for (const k of ["title", "format", "status", "series_id", "episode", "sponsor_id", "publish_date"] as const) if (v[k] !== (draft as any)[k]) out[k] = v[k];
@@ -551,6 +559,9 @@ function Panel({ data, id, close, closing }: { data: Data; id: string; close: ()
   const [pw, setPwRaw] = useState(() => { try { return Number(localStorage.getItem("vp-pw")) || 620; } catch { return 620; } });
   const setPw = (w: number) => { setPwRaw(w); try { localStorage.setItem("vp-pw", String(w)); } catch {} };
   data.useOpenVideo(id);
+  // the script editors are the heavy part: the panel (meta + title) opens on the click, they mount one frame later
+  const [ready, setReady] = useState(false);
+  useEffect(() => { const r = requestAnimationFrame(() => setReady(true)); return () => cancelAnimationFrame(r); }, []);
   const v = data.videos.find((x) => x.id === id);
   if (!v) return null;
   return (
@@ -572,7 +583,7 @@ function Panel({ data, id, close, closing }: { data: Data; id: string; close: ()
       </div>
       <div className="panel-swap" key={data.stable(v.id)}>
         <TitleInput data={data} v={v} />
-        <Script data={data} v={v} />
+        {ready && <Script data={data} v={v} />}
       </div>
     </aside>
   );
@@ -884,7 +895,7 @@ function FullScreen({ data, id }: { data: Data; id: string }) {
   data.useOpenVideo(id);
   const v = data.videos.find((x) => x.id === id);
   const exists = !!v;
-  useEffect(() => { if (exists) api.get(id).then((x) => setHist(x.history)).catch(() => {}); }, [id, exists, v?.script, v?.status]);
+  useEffect(() => { if (exists && !id.startsWith(TMP)) api.get(id).then((x) => setHist(x.history)).catch(() => {}); }, [id, exists, v?.script, v?.status]);
   if (!data.boot || !v) return <div className="empty">{t("Carregando…")}</div>;
   const series = data.boot.series.filter((s) => s.format === v.format);
   const deriv = v.format === "longo" ? DERIV_LONGO : DERIV_VERT;
