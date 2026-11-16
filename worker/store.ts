@@ -209,8 +209,11 @@ export class Store {
       if (k in patch) { sets.push(`${k} = ?`); args.push((patch as any)[k]); before[k] = (cur as any)[k]; }
     }
     if (patch.derivatives) {
-      sets.push("derivatives = ?");
-      args.push(JSON.stringify({ ...cur.derivatives, ...patch.derivatives }));
+      // Merged in SQL so two quick saves of different keys can't overwrite each other
+      sets.push("derivatives = json_patch(COALESCE(NULLIF(derivatives, ''), '{}'), ?)");
+      const d: Record<string, boolean> = {};
+      for (const [k, val] of Object.entries(patch.derivatives)) d[k] = !!val;
+      args.push(JSON.stringify(d));
       before.derivatives = cur.derivatives;
     }
     if (!sets.length) return cur;
