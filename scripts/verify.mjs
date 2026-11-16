@@ -689,6 +689,29 @@ const instantCreate = async (path, button, typed, blurEarly) => {
 };
 await check("ui: + New idea shows the card with its details open in < 100 ms; the title typed right away is kept after the server answers", () => instantCreate("ideias", ".newidea", "Instant idea verify", false));
 await check("ui: + New video shows the card with its details open in < 100 ms; a title typed and left before the server answers is saved", () => instantCreate("kanban", ".topbar .btn-dark", "Instant video verify", true));
+await check("ui: a video expanded to full screen while being created follows it to its real id (URL rewritten, editor kept, works after reload)", async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } }); await offline(ctx);
+  const p = await ctx.newPage(); let id;
+  try {
+    await p.route("**/api/videos", async (r) => { if (r.request().method() !== "POST") return r.continue(); await new Promise((x) => setTimeout(x, 1200)); await r.continue(); });
+    await p.goto(`${BASE}/ideias`, { waitUntil: "networkidle" });
+    const answered = p.waitForResponse((r) => r.url().endsWith("/api/videos") && r.request().method() === "POST"); answered.catch(() => {});
+    await p.locator(".newidea").first().click();
+    await p.locator('aside.panel a.iconbtn[href^="#/video/tmp-"]').click();
+    const ta = p.locator(".full .title-in"); await ta.waitFor({ timeout: 1000 });
+    assert(/^#\/video\/tmp-/.test(await p.evaluate(() => location.hash)), "full screen not opened while the create was still running (test too slow)");
+    const el = await ta.elementHandle();
+    await ta.click(); await p.keyboard.press("ControlOrMeta+a"); await p.keyboard.type("Full screen verify");
+    id = (await (await answered).json()).id; await p.waitForTimeout(400);
+    assert(await p.locator(".full .title-in").count() === 1, "full screen lost the video when the real id arrived");
+    assert(await el.evaluate((e) => e.isConnected), "full-screen editor re-mounted when the real id arrived");
+    assert(await p.evaluate(() => location.hash) === `#/video/${id}`, `URL still on the temporary id: ${await p.evaluate(() => location.hash)}`);
+    await p.evaluate(() => document.activeElement?.blur());
+    for (let i = 0; i < 20 && (await api(`/api/videos/${id}`)).body?.title !== "Full screen verify"; i++) await p.waitForTimeout(150);
+    await p.reload({ waitUntil: "networkidle" });
+    assert(await p.locator(".full .title-in").inputValue() === "Full screen verify", "full-screen URL doesn't open the video after reload");
+  } finally { await ctx.close(); if (id) await api(`/api/videos/${id}`, { method: "DELETE" }); }
+});
 await check("ui: a failed create (500) removes the temporary card and shows an error toast", async () => {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } }); await offline(ctx);
   const p = await ctx.newPage();

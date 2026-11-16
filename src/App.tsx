@@ -308,7 +308,14 @@ export default function App() {
   // a video opened while being created whose create failed: close its details
   useEffect(() => { if (openId?.startsWith(TMP) && !data.videos.some((v) => v.id === openId)) setOpenIdRaw(null); }, [data.videos, openId]);
 
-  const full = hash.match(/^#\/video\/(.+)$/)?.[1];
+  // full-screen route: a video expanded while being created follows it to its real id (and the URL is rewritten to it)
+  const fullRaw = hash.match(/^#\/video\/(.+)$/)?.[1];
+  const full = fullRaw && data.current(fullRaw);
+  useEffect(() => {
+    if (!fullRaw || !full) return;
+    if (full !== fullRaw) history.replaceState(null, "", location.pathname + location.search + "#/video/" + full);
+    else if (full.startsWith(TMP) && !data.videos.some((v) => v.id === full)) location.hash = ""; // its create failed
+  }, [fullRaw, full, data.videos]);
   const shown = data.videos.filter((v) => filter === "todos" || v.format === filter);
   useFlip(data.videos);
 
