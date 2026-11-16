@@ -2,6 +2,7 @@
 
 One line per merged PR (newest first). Each links to a release with the verify GIF and screenshots.
 
+- 2026-11-16 · **Sponsor logo stays inside the card at any width** ([#30](https://github.com/YudiG12/video-planner/pull/30) · [release with GIF/screens](https://github.com/YudiG12/video-planner/releases/tag/pr-30))
 - 2026-11-16 · **Derivative checkboxes don't affect each other** ([#29](https://github.com/YudiG12/video-planner/pull/29) · [release with GIF/screens](https://github.com/YudiG12/video-planner/releases/tag/pr-29))
 - 2026-11-16 · **Motion: fast, satisfying feedback across the app** ([#24](https://github.com/YudiG12/video-planner/pull/24) · [release with GIF/screens](https://github.com/YudiG12/video-planner/releases/tag/pr-24))
 - 2026-11-13 · **Cards show when the agent is editing that video** ([#23](https://github.com/YudiG12/video-planner/pull/23) · [release with GIF/screens](https://github.com/YudiG12/video-planner/releases/tag/pr-23))
