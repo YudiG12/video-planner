@@ -14,7 +14,7 @@ Builds the app, runs it on a throwaway local D1 with fake demo data (never produ
 
 **Verifier (Codex):** you did not write this code. Run `npm run verify`, then check the PR's "Done when…" items yourself against the running app (`--keep`) and the screenshots. Reply on the PR with `VERDICT: PASS` or `VERDICT: FAIL` + what failed, and attach the relevant screenshots. Don't fix the code.
 
-**Builder (Claude):** a PR is ready only when `npm run verify` passes. If you add a feature, add its check to `scripts/verify.mjs` and a line to the map below. Fill the PR template (Summary, Decisions, Attention). CI posts the proof comment (verdict, GIF, screenshots) automatically.
+**Builder (Claude):** a PR is ready only when `npm run verify` passes. If you add a feature, add its check to `scripts/verify.mjs` and a line to the map below. Fill the PR template (Summary, Cover, Demo, Decisions, Attention). CI posts the proof comment (verdict, GIF, screenshots) automatically.
 
 ## Feature map
 
@@ -53,3 +53,4 @@ Builds the app, runs it on a throwaway local D1 with fake demo data (never produ
 5. Migrations merge automatically; put the D1 Time Travel bookmark in the PR's "Attention".
 6. On merge, a GitHub Release `pr-N` is published (Summary, Decisions, proof GIF + screenshots) and a line is added to `CHANGELOG.md`. Write the PR Summary for the owner: it becomes the changelog entry.
    **Cover:** every PR fills `## Cover` in its body with one screenshot file name from `verify-out/` that best shows *this* PR's feature (the new screen or state, not the start page). CI puts it as the first image of the proof and the release; it is the thumbnail in the owner's panel. If the feature has no screenshot yet, add one to `scripts/verify.mjs`.
+   **Demo:** every PR that changes something you can see also records its own short GIF in `scripts/verify.mjs` (only the changed flow, a few seconds, nothing else) and names it in `## Demo`. It is the only GIF shown in the proof, the release and the owner's panel; older features' GIFs are just linked, folded.
