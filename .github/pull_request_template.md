@@ -6,6 +6,9 @@ Closes #
 ## Cover
 <!-- one screenshot file name from verify-out/ that best shows THIS PR's feature (the new screen or state, not the start page), e.g. board-desktop.png -->
 
+## Demo
+<!-- one GIF file name from verify-out/ recorded by THIS PR's verify check, showing only the flow you changed (e.g. derivatives-check.gif). It is the only GIF shown in the proof, the release and the owner's panel. -->
+
 ## Decisions
 <!-- choices made while building and why -->
 

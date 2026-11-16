@@ -17,11 +17,15 @@ try { body = execFileSync("gh", ["pr", "view", pr, "--repo", repo, "--json", "bo
 const named = (/##\s*Cover\s*\n(?:<!--[\s\S]*?-->\s*)?`?([\w.-]+\.png)`?/i.exec(body) || [])[1];
 const cover = named && pngs.includes(named) ? named : pngs[0];
 if (cover) md += `![cover](${raw(cover)})\n\n`;
-// feature GIFs first (newest feature checks record their own), then the main flow
-const gifs = readdirSync("verify-out").filter((f) => f.endsWith(".gif") && !["flow.gif", "live.gif"].includes(f));
-for (const g of gifs) md += `### ${g.replace(".gif", "")}\n![${g}](${raw(g)})\n\n`;
-if (existsSync("verify-out/flow.gif")) md += `### Main flow\n![flow](${raw("flow.gif")})\n\n`;
-if (existsSync("verify-out/live.gif")) md += `### Live update (agent edits a block while the app is open)\n![live](${raw("live.gif")})\n\n`;
+// Demo: only the GIF named in the PR body's "## Demo" section (recorded by this PR's own verify check) is shown,
+// right after the cover, so the Herdr panel and the release show the flow this PR changed, not an older feature's.
+// Every other GIF is only linked, folded, so no reader picks one of them by accident.
+const allGifs = readdirSync("verify-out").filter((f) => f.endsWith(".gif"));
+const demo = (/##\s*Demo\s*\n(?:<!--[\s\S]*?-->\s*)?`?([\w.-]+\.gif)`?/i.exec(body) || [])[1];
+if (demo && allGifs.includes(demo)) md += `### Demo\n![demo](${raw(demo)})\n\n`;
+else md += `> No \`## Demo\` GIF named in the PR body${demo ? ` (\`${demo}\` not found in verify-out)` : ""}.\n\n`;
+const others = allGifs.filter((g) => g !== demo);
+if (others.length) md += `<details><summary>Other recordings (older features, unchanged)</summary>\n\n${others.map((g) => `- [${g}](${raw(g)})`).join("\n")}\n</details>\n\n`;
 md += `### Screens\n<table><tr>${pngs.map((f, i) => `${i && i % 2 === 0 ? "</tr><tr>" : ""}<td><b>${f.replace(".png", "")}</b><br><a href="${raw(f)}"><img src="${raw(f)}" width="420"></a></td>`).join("")}</tr></table>\n\n`;
 md += `<details><summary>Checks</summary>\n\n${r.results.map((x) => `- ${x.ok ? "✅" : "❌"} ${x.name}${x.ok ? "" : ` — ${x.error}`}`).join("\n")}\n</details>\n`;
 process.stdout.write(md);
