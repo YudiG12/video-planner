@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "setup": "node scripts/setup.mjs",
     "db:seed:demo": "wrangler d1 execute video-planner --local --file scripts/demo-seed.sql",
-    "verify": "node scripts/verify.mjs"
+    "verify": "node scripts/verify.mjs",
+    "deploy:local": "node scripts/deploy-local.mjs"
   },
   "dependencies": {
     "@tiptap/extension-image": "^2.11.5",
