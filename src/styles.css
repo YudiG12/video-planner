@@ -498,7 +498,3 @@ button:active:not(:disabled){transform:scale(.96)}
 @media (prefers-reduced-motion: reduce){.saved-tick{animation:none}}
 .skel-board{flex:1;display:flex;gap:16px;padding:32px}
 .skel-col{width:280px;display:flex;flex-direction:column;gap:12px}
-/* verticais no calendário: meia largura, menos destaque que os longos */
-.day .chip.ig{width:50%;align-self:flex-start;padding:6px;gap:4px}
-.day .chip.ig .chip-t{font-size:11px;line-height:13px;font-weight:500}
-.day .chip.ig .card-meta{display:none}
